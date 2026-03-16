@@ -1,11 +1,11 @@
-FROM golang:1.11-alpine as build
-RUN apk update && apk add git
-WORKDIR /go/src/github.com/lucj/genx
+FROM golang:1.24-alpine AS build
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
 COPY *.go ./
-RUN go get github.com/lucj/genx
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o genx .
+RUN CGO_ENABLED=0 GOOS=linux go build -o genx .
 
 FROM scratch
-COPY --from=build /go/src/github.com/lucj/genx/genx /
+COPY --from=build /app/genx /genx
 ENTRYPOINT ["/genx"]
 CMD ["--help"]

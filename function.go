@@ -1,13 +1,10 @@
 package main
 
 import (
-       "fmt"
-       "math"
-       )
+	"math"
+)
 
 func GetLinear(first float64, last float64, start int64, durationSeconds int) func(x float64) float64 {
-    fmt.Println(first, last, durationSeconds)
-
     // Build function : y = A.(x-B)+C
     fn := func(x float64) float64 {
         A := (last - first) / float64(durationSeconds)
@@ -18,10 +15,7 @@ func GetLinear(first float64, last float64, start int64, durationSeconds int) fu
     return fn
 }
 
-func GetCosinus(min float64, max float64, period string) func(x float64) float64 {
-    // Parse period
-    periodSeconds := GetSeconds(period)
-
+func GetCosinus(min float64, max float64, periodSeconds int) func(x float64) float64 {
     // Build function : y = A.cos(B(x-C))+D
     fn := func(x float64) float64 {
         A := (max - min) / 2
