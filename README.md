@@ -1,54 +1,136 @@
-Simple data generator
+# genx
 
-Cosinus curve with the following caracteristics:
-- duration of 2 days
-- sampling done every 3 hour
-- mininal value is 20
-- maximal value is 30
+**genx** is a lightweight time-series data generator. It emits synthetic measurements following a mathematical curve — useful for testing dashboards, messaging pipelines, or IoT simulators.
+
+Each data point is output as JSON:
+```json
+{"device":"sensor1","timestamp":1715000000,"value":24.53}
+```
+
+## Quick start
 
 ```
-$ docker run lucj/genx -type cos -duration 2d -min 20 -max 30 -step 3h
-1538766162 26.35
-1538776962 29.36
-1538787762 29.81
-1538798562 27.45
-1538809362 23.65
-1538820162 20.64
-1538830962 20.19
-1538841762 22.55
-1538852562 26.35
-1538863362 29.36
-1538874162 29.81
-1538884962 27.45
-1538895762 23.65
-1538906562 20.64
-1538917362 20.19
-1538928162 22.55
+docker run lucj/genx [flags]
+```
+
+Or build locally:
+```
+go build -o genx . && ./genx [flags]
+```
+
+## Curve types
+
+### Cosine
+
+Oscillates between `--min` and `--max` over the given `--period`.
+
+```
+$ docker run lucj/genx -type cos -duration 2d -min 20 -max 30 -step 3h -period 1d
+{"device":"device","timestamp":1715000000,"value":30.00}
+{"device":"device","timestamp":1715010800,"value":27.50}
+{"device":"device","timestamp":1715021600,"value":22.50}
+{"device":"device","timestamp":1715032400,"value":20.00}
+...
 ```
 
 ![Cosinus graph](/images/cos.png)
 
-Linear curve with the following caracteristics:
-- duration of 3 days
-- sampling done every 6 hours
-- first value is 10
-- last value is 30
+### Linear
 
+Ramps from `--first` to `--last` over the total duration.
 
 ```
 $ docker run lucj/genx -type linear -duration 3d -first 10 -last 30 -step 6h
-1538766338 10.00
-1538787938 11.67
-1538809538 13.33
-1538831138 15.00
-1538852738 16.67
-1538874338 18.33
-1538895938 20.00
-1538917538 21.67
-1538939138 23.33
-1538960738 25.00
-1538982338 26.67
-1539003938 28.33
+{"device":"device","timestamp":1715000000,"value":10.00}
+{"device":"device","timestamp":1715021600,"value":11.67}
+{"device":"device","timestamp":1715043200,"value":13.33}
+...
 ```
 
 ![Linear graph](/images/linear.png)
+
+### Logarithmic
+
+Produces a slow-growing logarithmic curve (natural log of elapsed seconds).
+
+```
+$ docker run lucj/genx -type log -duration 1d -step 2h
+{"device":"device","timestamp":1715000000,"value":0.00}
+{"device":"device","timestamp":1715007200,"value":8.88}
+{"device":"device","timestamp":1715014400,"value":9.57}
+...
+```
+
+### Exponential
+
+Grows exponentially over the duration.
+
+```
+$ docker run lucj/genx -type exp -duration 6h -step 30m
+{"device":"device","timestamp":1715000000,"value":1.00}
+{"device":"device","timestamp":1715001800,"value":1.07}
+{"device":"device","timestamp":1715003600,"value":1.15}
+...
+```
+
+## Output sinks
+
+By default data is written to stdout. Use `--output` to route it elsewhere.
+
+### Webhook
+
+POSTs each data point as JSON to an HTTP endpoint.
+
+```
+$ docker run lucj/genx -type cos -duration 1h -step 5m \
+    -output webhook -webhook-url http://myserver/ingest
+```
+
+### NATS
+
+Publishes to a NATS subject.
+
+```
+$ docker run lucj/genx -type linear -duration 1h -step 1m \
+    -output nats -nats-url nats://localhost:4222 -nats-subject sensors.temp
+```
+
+### MQTT
+
+Publishes to an MQTT topic.
+
+```
+$ docker run lucj/genx -type cos -duration 1h -step 5m \
+    -output mqtt -mqtt-broker tcp://localhost:1883 -mqtt-topic home/temperature
+```
+
+## Realtime mode
+
+By default genx generates the full dataset instantly (batch mode). Add `--realtime` to emit one point per `--step` interval using the actual wall clock — handy for live pipeline testing.
+
+```
+$ docker run lucj/genx -type cos -min 18 -max 26 -duration 1h -step 10s --realtime
+```
+
+## All flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-type` | `cos` | Curve type: `cos`, `linear`, `log`, `exp` |
+| `-duration` | `1d` | Total duration (e.g. `2d`, `6h`, `30m`) |
+| `-step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |
+| `-device` | `device` | Device/sensor name in each data point |
+| `-realtime` | false | Emit one point per step using real time |
+| `-min` | `10` | Min value (cos) |
+| `-max` | `25` | Max value (cos) |
+| `-period` | `1d` | Period (cos) |
+| `-first` | `0` | First value (linear) |
+| `-last` | `1` | Last value (linear) |
+| `-output` | `stdout` | Output sink: `stdout`, `webhook`, `nats`, `mqtt` |
+| `-webhook-url` | | Webhook endpoint URL |
+| `-nats-url` | `nats://localhost:4222` | NATS server URL |
+| `-nats-subject` | `genx` | NATS subject |
+| `-mqtt-broker` | `tcp://localhost:1883` | MQTT broker URL |
+| `-mqtt-topic` | `genx` | MQTT topic |
+| `-mqtt-qos` | `0` | MQTT QoS level (0, 1, 2) |
+| `-mqtt-client-id` | `genx-<pid>` | MQTT client ID |
