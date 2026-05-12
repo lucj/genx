@@ -105,7 +105,7 @@ docker network create genx-net
 docker run -d --name nats --network genx-net nats
 
 # 3. subscriber (another terminal)
-docker run --rm --network genx-net nats \
+docker run --rm --network genx-net natsio/nats-box \
     nats sub -s nats://nats:4222 sensors.temp
 
 # 4. generate and publish
