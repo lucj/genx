@@ -29,5 +29,8 @@ func (s *NatsSink) Send(dp DataPoint) error {
 }
 
 func (s *NatsSink) Close() error {
+	if err := s.nc.Flush(); err != nil {
+		return err
+	}
 	return s.nc.Drain()
 }
