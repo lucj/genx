@@ -92,7 +92,26 @@ Publishes to a NATS subject.
 
 ```
 $ docker run ghcr.io/lucj/genx -type linear -duration 1h -step 1m \
-    -output nats -nats-url nats://localhost:4222 -nats-subject sensors.temp
+    -output nats -nats-url nats://<NATS_HOST>:4222 -nats-subject sensors.temp
+```
+
+**End-to-end example with a containerised NATS server:**
+
+```
+# 1. shared network
+docker network create genx-net
+
+# 2. NATS server
+docker run -d --name nats --network genx-net nats
+
+# 3. subscriber (another terminal)
+docker run --rm --network genx-net nats \
+    nats sub -s nats://nats:4222 sensors.temp
+
+# 4. generate and publish
+docker run --network genx-net ghcr.io/lucj/genx \
+    -type linear -duration 1h -step 1m \
+    -output nats -nats-url nats://nats:4222 -nats-subject sensors.temp
 ```
 
 ### MQTT
@@ -101,7 +120,7 @@ Publishes to an MQTT topic.
 
 ```
 $ docker run ghcr.io/lucj/genx -type cos -duration 1h -step 5m \
-    -output mqtt -mqtt-broker tcp://localhost:1883 -mqtt-topic home/temperature
+    -output mqtt -mqtt-broker tcp://<MQTT_HOST>:1883 -mqtt-topic home/temperature
 ```
 
 ## Realtime mode
@@ -128,9 +147,9 @@ $ docker run ghcr.io/lucj/genx -type cos -min 18 -max 26 -duration 1h -step 10s 
 | `-last` | `1` | Last value (linear) |
 | `-output` | `stdout` | Output sink: `stdout`, `webhook`, `nats`, `mqtt` |
 | `-webhook-url` | | Webhook endpoint URL |
-| `-nats-url` | `nats://localhost:4222` | NATS server URL |
+| `-nats-url` | `nats://<NATS_HOST>:4222` | NATS server URL |
 | `-nats-subject` | `genx` | NATS subject |
-| `-mqtt-broker` | `tcp://localhost:1883` | MQTT broker URL |
+| `-mqtt-broker` | `tcp://<MQTT_HOST>:1883` | MQTT broker URL |
 | `-mqtt-topic` | `genx` | MQTT topic |
 | `-mqtt-qos` | `0` | MQTT QoS level (0, 1, 2) |
 | `-mqtt-client-id` | `genx-<pid>` | MQTT client ID |
