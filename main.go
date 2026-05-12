@@ -98,7 +98,11 @@ func main() {
 	default:
 		log.Fatalf("unknown output %q (use stdout, webhook, nats, mqtt)", *outputPtr)
 	}
-	defer sink.Close()
+	defer func() {
+		if err := sink.Close(); err != nil {
+			log.Printf("sink close error: %v", err)
+		}
+	}()
 
 	itemCount := durationSeconds / stepSeconds
 
