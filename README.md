@@ -10,7 +10,7 @@ Each data point is output as JSON:
 ## Quick start
 
 ```
-docker run lucj/genx [flags]
+docker run ghcr.io/lucj/genx [flags]
 ```
 
 Or build locally:
@@ -25,7 +25,7 @@ go build -o genx . && ./genx [flags]
 Oscillates between `--min` and `--max` over the given `--period`.
 
 ```
-$ docker run lucj/genx -type cos -duration 2d -min 20 -max 30 -step 3h -period 1d
+$ docker run ghcr.io/lucj/genx -type cos -duration 2d -min 20 -max 30 -step 3h -period 1d
 {"device":"device","timestamp":1715000000,"value":30.00}
 {"device":"device","timestamp":1715010800,"value":27.50}
 {"device":"device","timestamp":1715021600,"value":22.50}
@@ -40,7 +40,7 @@ $ docker run lucj/genx -type cos -duration 2d -min 20 -max 30 -step 3h -period 1
 Ramps from `--first` to `--last` over the total duration.
 
 ```
-$ docker run lucj/genx -type linear -duration 3d -first 10 -last 30 -step 6h
+$ docker run ghcr.io/lucj/genx -type linear -duration 3d -first 10 -last 30 -step 6h
 {"device":"device","timestamp":1715000000,"value":10.00}
 {"device":"device","timestamp":1715021600,"value":11.67}
 {"device":"device","timestamp":1715043200,"value":13.33}
@@ -54,7 +54,7 @@ $ docker run lucj/genx -type linear -duration 3d -first 10 -last 30 -step 6h
 Produces a slow-growing logarithmic curve (natural log of elapsed seconds).
 
 ```
-$ docker run lucj/genx -type log -duration 1d -step 2h
+$ docker run ghcr.io/lucj/genx -type log -duration 1d -step 2h
 {"device":"device","timestamp":1715000000,"value":0.00}
 {"device":"device","timestamp":1715007200,"value":8.88}
 {"device":"device","timestamp":1715014400,"value":9.57}
@@ -66,7 +66,7 @@ $ docker run lucj/genx -type log -duration 1d -step 2h
 Grows exponentially over the duration.
 
 ```
-$ docker run lucj/genx -type exp -duration 6h -step 30m
+$ docker run ghcr.io/lucj/genx -type exp -duration 6h -step 30m
 {"device":"device","timestamp":1715000000,"value":1.00}
 {"device":"device","timestamp":1715001800,"value":1.07}
 {"device":"device","timestamp":1715003600,"value":1.15}
@@ -82,7 +82,7 @@ By default data is written to stdout. Use `--output` to route it elsewhere.
 POSTs each data point as JSON to an HTTP endpoint.
 
 ```
-$ docker run lucj/genx -type cos -duration 1h -step 5m \
+$ docker run ghcr.io/lucj/genx -type cos -duration 1h -step 5m \
     -output webhook -webhook-url http://myserver/ingest
 ```
 
@@ -91,7 +91,7 @@ $ docker run lucj/genx -type cos -duration 1h -step 5m \
 Publishes to a NATS subject.
 
 ```
-$ docker run lucj/genx -type linear -duration 1h -step 1m \
+$ docker run ghcr.io/lucj/genx -type linear -duration 1h -step 1m \
     -output nats -nats-url nats://localhost:4222 -nats-subject sensors.temp
 ```
 
@@ -100,7 +100,7 @@ $ docker run lucj/genx -type linear -duration 1h -step 1m \
 Publishes to an MQTT topic.
 
 ```
-$ docker run lucj/genx -type cos -duration 1h -step 5m \
+$ docker run ghcr.io/lucj/genx -type cos -duration 1h -step 5m \
     -output mqtt -mqtt-broker tcp://localhost:1883 -mqtt-topic home/temperature
 ```
 
@@ -109,7 +109,7 @@ $ docker run lucj/genx -type cos -duration 1h -step 5m \
 By default genx generates the full dataset instantly (batch mode). Add `--realtime` to emit one point per `--step` interval using the actual wall clock — handy for live pipeline testing.
 
 ```
-$ docker run lucj/genx -type cos -min 18 -max 26 -duration 1h -step 10s --realtime
+$ docker run ghcr.io/lucj/genx -type cos -min 18 -max 26 -duration 1h -step 10s --realtime
 ```
 
 ## All flags
