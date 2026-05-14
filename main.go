@@ -21,6 +21,7 @@ func main() {
 	devicePtr := flag.String("device", "device", "device/sensor name (or prefix when --devices > 1)")
 	devicesPtr := flag.Int("devices", 1, "number of devices to simulate simultaneously")
 	spreadPtr := flag.Float64("spread", 0.0, "per-device value spread as a ratio, e.g. 0.1 = ±10%")
+	noisePtr := flag.Float64("noise", 0.0, "random noise added to every sample as a ratio, e.g. 0.05 = ±5%")
 	realtimePtr := flag.Bool("realtime", false, "real-time mode: emit one point per step interval")
 
 	// Linear curve flags
@@ -50,6 +51,8 @@ func main() {
 	mqttTopic := flag.String("mqtt-topic", "genx", "MQTT topic to publish to")
 	mqttQoS := flag.Int("mqtt-qos", 0, "MQTT QoS level (0, 1, or 2)")
 	mqttClientID := flag.String("mqtt-client-id", fmt.Sprintf("genx-%d", os.Getpid()), "MQTT client ID")
+	mqttUser := flag.String("mqtt-user", "", "MQTT username")
+	mqttPassword := flag.String("mqtt-password", "", "MQTT password")
 
 	flag.Parse()
 
@@ -83,10 +86,13 @@ func main() {
 		if cfg.NatsSubject != "" && !set["nats-subject"]        { *natsSubject = cfg.NatsSubject }
 		if cfg.NatsUser != "" && !set["nats-user"]              { *natsUser = cfg.NatsUser }
 		if cfg.NatsPassword != "" && !set["nats-password"]      { *natsPassword = cfg.NatsPassword }
+		if cfg.Noise != nil && !set["noise"]                     { *noisePtr = *cfg.Noise }
 		if cfg.MqttBroker != "" && !set["mqtt-broker"]          { *mqttBroker = cfg.MqttBroker }
 		if cfg.MqttTopic != "" && !set["mqtt-topic"]            { *mqttTopic = cfg.MqttTopic }
 		if cfg.MqttQoS != nil && !set["mqtt-qos"]               { *mqttQoS = *cfg.MqttQoS }
 		if cfg.MqttClientID != "" && !set["mqtt-client-id"]     { *mqttClientID = cfg.MqttClientID }
+		if cfg.MqttUser != "" && !set["mqtt-user"]              { *mqttUser = cfg.MqttUser }
+		if cfg.MqttPassword != "" && !set["mqtt-password"]      { *mqttPassword = cfg.MqttPassword }
 	}
 
 	if *devicesPtr < 1 {
@@ -140,7 +146,7 @@ func main() {
 		}
 		fn := baseFn
 		s := scale
-		fns[i] = func(x float64) float64 { return fn(x) * s }
+		fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
 	}
 
 	// Build the output sink
@@ -159,7 +165,7 @@ func main() {
 			log.Fatalf("NATS connection failed: %v", err)
 		}
 	case "mqtt":
-		sink, err = NewMqttSink(*mqttBroker, *mqttTopic, *mqttClientID, *mqttQoS)
+		sink, err = NewMqttSink(*mqttBroker, *mqttTopic, *mqttClientID, *mqttQoS, *mqttUser, *mqttPassword)
 		if err != nil {
 			log.Fatalf("MQTT connection failed: %v", err)
 		}

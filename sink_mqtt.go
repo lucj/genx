@@ -15,11 +15,15 @@ type MqttSink struct {
 	qos    byte
 }
 
-func NewMqttSink(broker, topic, clientID string, qos int) (*MqttSink, error) {
+func NewMqttSink(broker, topic, clientID string, qos int, user, password string) (*MqttSink, error) {
 	opts := mqtt.NewClientOptions().
 		AddBroker(broker).
 		SetClientID(clientID).
 		SetCleanSession(true)
+	if user != "" {
+		opts.SetUsername(user)
+		opts.SetPassword(password)
+	}
 
 	client := mqtt.NewClient(opts)
 	token := client.Connect()

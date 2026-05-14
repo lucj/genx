@@ -16,6 +16,7 @@ type Config struct {
 	Device   string   `yaml:"device"`
 	Devices  *int     `yaml:"devices"`
 	Spread   *float64 `yaml:"spread"`
+	Noise    *float64 `yaml:"noise"`
 	Realtime *bool    `yaml:"realtime"`
 
 	First  *float64 `yaml:"first"`
@@ -35,6 +36,8 @@ type Config struct {
 	MqttTopic    string `yaml:"mqtt-topic"`
 	MqttQoS      *int   `yaml:"mqtt-qos"`
 	MqttClientID string `yaml:"mqtt-client-id"`
+	MqttUser     string `yaml:"mqtt-user"`
+	MqttPassword string `yaml:"mqtt-password"`
 }
 
 func LoadConfig(path string) (*Config, error) {

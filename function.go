@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"math/rand/v2"
 )
 
 func GetLinear(first float64, last float64, start int64, durationSeconds int) func(x float64) float64 {
@@ -36,6 +37,17 @@ func GetLog(start int64) func(x float64) float64 {
         return A * math.Log(x-B) + C
     }
     return fn
+}
+
+// WithNoise wraps fn with multiplicative random jitter in ±noise ratio.
+// WithNoise(fn, 0) returns fn unchanged.
+func WithNoise(fn func(float64) float64, noise float64) func(float64) float64 {
+	if noise <= 0 {
+		return fn
+	}
+	return func(x float64) float64 {
+		return fn(x) * (1 + noise*(2*rand.Float64()-1))
+	}
 }
 
 func GetExp(start int64, durationSeconds int) func(x float64) float64 {

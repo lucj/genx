@@ -51,6 +51,38 @@ func TestGetLog(t *testing.T) {
 	}
 }
 
+func TestWithNoiseZero(t *testing.T) {
+	base := func(x float64) float64 { return 100.0 }
+	fn := WithNoise(base, 0)
+	if fn(0) != 100.0 {
+		t.Errorf("zero noise should return base value unchanged, got %f", fn(0))
+	}
+}
+
+func TestWithNoiseStaysInRange(t *testing.T) {
+	base := func(x float64) float64 { return 100.0 }
+	noise := 0.2 // ±20%
+	fn := WithNoise(base, noise)
+	for i := range 200 {
+		v := fn(float64(i))
+		if v < 80-1e-9 || v > 120+1e-9 {
+			t.Errorf("value %f outside expected range [80, 120] with noise=0.2", v)
+		}
+	}
+}
+
+func TestWithNoiseAddsVariation(t *testing.T) {
+	base := func(x float64) float64 { return 100.0 }
+	fn := WithNoise(base, 0.5)
+	seen := map[float64]bool{}
+	for i := range 20 {
+		seen[fn(float64(i))] = true
+	}
+	if len(seen) == 1 {
+		t.Error("noise should produce different values across samples")
+	}
+}
+
 func TestGetExp(t *testing.T) {
 	start := time.Now().Unix()
 	duration := 3600
