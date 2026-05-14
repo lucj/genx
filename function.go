@@ -1,9 +1,6 @@
 package main
 
-import (
-	"math"
-	"math/rand/v2"
-)
+import "math"
 
 func GetLinear(first float64, last float64, start int64, durationSeconds int) func(x float64) float64 {
     // Build function : y = A.(x-B)+C
@@ -46,7 +43,7 @@ func WithNoise(fn func(float64) float64, noise float64) func(float64) float64 {
 		return fn
 	}
 	return func(x float64) float64 {
-		return fn(x) * (1 + noise*(2*rand.Float64()-1))
+		return fn(x) * (1 + noise*(2*rng.Float64()-1))
 	}
 }
 

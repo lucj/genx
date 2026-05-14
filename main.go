@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand/v2"
 	"os"
 	"sync"
 	"time"
@@ -23,6 +22,10 @@ func main() {
 	spreadPtr := flag.Float64("spread", 0.0, "per-device value spread as a ratio, e.g. 0.1 = ±10%")
 	noisePtr := flag.Float64("noise", 0.0, "random noise added to every sample as a ratio, e.g. 0.05 = ±5%")
 	realtimePtr := flag.Bool("realtime", false, "real-time mode: emit one point per step interval")
+	seedPtr := flag.Int64("seed", 0, "random seed for reproducible output (0 = random); batch mode only")
+
+	// Replay flag
+	replayFilePtr := flag.String("replay-file", "", "path to a JSON-lines file to replay through the configured sink")
 
 	// Linear curve flags
 	linearFirst := flag.Float64("first", 0, "first value (linear)")
@@ -75,6 +78,8 @@ func main() {
 		if cfg.Spread != nil && !set["spread"]                  { *spreadPtr = *cfg.Spread }
 		if cfg.Noise != nil && !set["noise"]                    { *noisePtr = *cfg.Noise }
 		if cfg.Realtime != nil && !set["realtime"]              { *realtimePtr = *cfg.Realtime }
+		if cfg.Seed != nil && !set["seed"]                      { *seedPtr = *cfg.Seed }
+		if cfg.ReplayFile != "" && !set["replay-file"]          { *replayFilePtr = cfg.ReplayFile }
 
 		if cfg.First != nil && !set["first"]                    { *linearFirst = *cfg.First }
 		if cfg.Last != nil && !set["last"]                      { *linearLast = *cfg.Last }
@@ -97,33 +102,13 @@ func main() {
 		if cfg.MqttPassword != "" && !set["mqtt-password"]      { *mqttPassword = cfg.MqttPassword }
 	}
 
-	if *devicesPtr < 1 {
-		log.Fatal("--devices must be at least 1")
+	// Reseed before any random values are consumed.
+	if *seedPtr != 0 {
+		initRand(uint64(*seedPtr))
 	}
 
-	// Parse durations
-	durationSeconds, err := GetSeconds(*durationPtr)
-	if err != nil {
-		log.Fatalf("invalid --duration: %v", err)
-	}
-	stepSeconds, err := GetSeconds(*stepPtr)
-	if err != nil {
-		log.Fatalf("invalid --step: %v", err)
-	}
-
-	start := time.Now().Unix()
-
-	// Build device names
-	devices := make([]string, *devicesPtr)
-	for i := range devices {
-		if *devicesPtr == 1 {
-			devices[i] = *devicePtr
-		} else {
-			devices[i] = fmt.Sprintf("%s-%d", *devicePtr, i)
-		}
-	}
-
-	// Build the output sink
+	// Build the output sink.
+	var err error
 	var sink Sink
 	switch *outputPtr {
 	case "stdout":
@@ -148,6 +133,42 @@ func main() {
 	}
 	defer sink.Close()
 
+	// Replay mode: send a recorded JSON-lines file through the sink.
+	if *replayFilePtr != "" {
+		stepSeconds, err := GetSeconds(*stepPtr)
+		if err != nil {
+			log.Fatalf("invalid --step: %v", err)
+		}
+		runReplay(*replayFilePtr, sink, *realtimePtr, stepSeconds)
+		return
+	}
+
+	if *devicesPtr < 1 {
+		log.Fatal("--devices must be at least 1")
+	}
+
+	// Parse durations.
+	durationSeconds, err := GetSeconds(*durationPtr)
+	if err != nil {
+		log.Fatalf("invalid --duration: %v", err)
+	}
+	stepSeconds, err := GetSeconds(*stepPtr)
+	if err != nil {
+		log.Fatalf("invalid --step: %v", err)
+	}
+
+	start := time.Now().Unix()
+
+	// Build device names.
+	devices := make([]string, *devicesPtr)
+	for i := range devices {
+		if *devicesPtr == 1 {
+			devices[i] = *devicePtr
+		} else {
+			devices[i] = fmt.Sprintf("%s-%d", *devicePtr, i)
+		}
+	}
+
 	itemCount := durationSeconds / stepSeconds
 
 	// Multi-field mode: only available via config file.
@@ -164,7 +185,7 @@ func main() {
 		for i := range scales {
 			scales[i] = 1.0
 			if *spreadPtr > 0 {
-				scales[i] = 1.0 + *spreadPtr*(2*rand.Float64()-1)
+				scales[i] = 1.0 + *spreadPtr*(2*rng.Float64()-1)
 			}
 		}
 		if *realtimePtr {
@@ -199,7 +220,7 @@ func main() {
 	for i := range fns {
 		scale := 1.0
 		if *spreadPtr > 0 {
-			scale = 1.0 + *spreadPtr*(2*rand.Float64()-1)
+			scale = 1.0 + *spreadPtr*(2*rng.Float64()-1)
 		}
 		fn := baseFn
 		s := scale
@@ -300,7 +321,7 @@ func evalFields(fieldFns map[string]func(float64) float64, scale, noise, x float
 	for name, fn := range fieldFns {
 		v := fn(x) * scale
 		if noise > 0 {
-			v *= 1 + noise*(2*rand.Float64()-1)
+			v *= 1 + noise*(2*rng.Float64()-1)
 		}
 		fields[name] = v
 	}
