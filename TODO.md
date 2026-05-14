@@ -12,7 +12,7 @@ These are picked for differentiation — no other lightweight CLI simulator does
 
 1. ~~**Multi-field payloads**~~ ✅ — closes the biggest gap vs real IoT devices; makes the tool credible for actual teams, not just demos
 2. **Anomaly injection** — unique angle: test your alerting pipeline without crafting edge cases by hand
-3. **Reproducible runs (`--seed`)** — makes genx CI-ready and scenario-shareable; rare in data simulation tools
+3. ~~**Reproducible runs (`--seed`)**~~ ✅ — makes genx CI-ready and scenario-shareable; rare in data simulation tools
 
 ---
 
@@ -32,17 +32,12 @@ edge-case datasets. No other lightweight CLI simulator does this out of the box.
 Simulates connectivity loss or sensor failure; lets consumers prove they handle gaps correctly.
 Pair with anomaly injection for a full fault-simulation mode.
 
-### 🔴 Reproducible runs (`--seed <int>`)
+### ✅ Reproducible runs (`--seed <int>`)
 Fix the random number generator seed so every run with the same parameters produces identical output.
-`math/rand/v2` auto-seeds randomly at startup, so noise and spread differ on every invocation.
-With `--seed 42`, the sequence is deterministic — useful for:
-- CI tests that assert exact output values
-- Sharing a scenario reproducibly ("run with `--seed 42` to get what I saw")
-- Debugging an anomaly from a specific past run
+Guaranteed in batch mode; best-effort in realtime fleet mode (goroutine scheduling is non-deterministic).
+Also configurable via YAML (`seed: 42`).
 
-Note: this is different from **replay mode** (a separate feature), which feeds a previously
-recorded JSON/CSV file back through a sink. `--seed` is purely about making the random
-generator deterministic, not about replaying real captured data.
+Note: different from replay mode — `--seed` makes the generator deterministic, not replaying captured data.
 
 ---
 
@@ -108,6 +103,8 @@ Currently Ctrl+C in realtime fleet mode kills goroutines mid-flight.
 Catch `SIGINT`/`SIGTERM`, signal each device goroutine to stop after its current point,
 then drain sinks before exiting. Correctness fix more than a feature.
 
-### 🟢 Replay mode
-Feed a recorded JSON-lines or CSV file back through any sink at a controlled rate.
-Capture real device traffic once, replay it deterministically in CI or load tests.
+### ✅ Replay mode (`--replay-file`)
+Feed a recorded JSON-lines file back through any sink.
+Batch mode: sends immediately, preserving original timestamps.
+Realtime mode (`--realtime`): waits `--step` between sends, stamps current time.
+Handles both single-field and multi-field payloads; skips invalid/empty lines gracefully.
