@@ -26,8 +26,11 @@ type Config struct {
 
 	Output       string `yaml:"output"`
 	WebhookURL   string `yaml:"webhook-url"`
+	WebhookToken string `yaml:"webhook-token"`
 	NatsURL      string `yaml:"nats-url"`
 	NatsSubject  string `yaml:"nats-subject"`
+	NatsUser     string `yaml:"nats-user"`
+	NatsPassword string `yaml:"nats-password"`
 	MqttBroker   string `yaml:"mqtt-broker"`
 	MqttTopic    string `yaml:"mqtt-topic"`
 	MqttQoS      *int   `yaml:"mqtt-qos"`

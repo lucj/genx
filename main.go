@@ -37,10 +37,13 @@ func main() {
 
 	// Webhook flags
 	webhookURL := flag.String("webhook-url", "", "webhook URL (required for --output webhook)")
+	webhookToken := flag.String("webhook-token", "", "bearer token for webhook Authorization header")
 
 	// NATS flags
 	natsURL := flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
 	natsSubject := flag.String("nats-subject", "genx", "NATS subject to publish to")
+	natsUser := flag.String("nats-user", "", "NATS username")
+	natsPassword := flag.String("nats-password", "", "NATS password")
 
 	// MQTT flags
 	mqttBroker := flag.String("mqtt-broker", "tcp://localhost:1883", "MQTT broker URL")
@@ -73,14 +76,17 @@ func main() {
 		if cfg.Max != nil && !set["max"]                 { *cosMax = *cfg.Max }
 		if cfg.Period != "" && !set["period"]            { *cosPeriod = cfg.Period }
 
-		if cfg.Output != "" && !set["output"]            { *outputPtr = cfg.Output }
-		if cfg.WebhookURL != "" && !set["webhook-url"]   { *webhookURL = cfg.WebhookURL }
-		if cfg.NatsURL != "" && !set["nats-url"]         { *natsURL = cfg.NatsURL }
-		if cfg.NatsSubject != "" && !set["nats-subject"] { *natsSubject = cfg.NatsSubject }
-		if cfg.MqttBroker != "" && !set["mqtt-broker"]   { *mqttBroker = cfg.MqttBroker }
-		if cfg.MqttTopic != "" && !set["mqtt-topic"]     { *mqttTopic = cfg.MqttTopic }
-		if cfg.MqttQoS != nil && !set["mqtt-qos"]        { *mqttQoS = *cfg.MqttQoS }
-		if cfg.MqttClientID != "" && !set["mqtt-client-id"] { *mqttClientID = cfg.MqttClientID }
+		if cfg.Output != "" && !set["output"]                   { *outputPtr = cfg.Output }
+		if cfg.WebhookURL != "" && !set["webhook-url"]          { *webhookURL = cfg.WebhookURL }
+		if cfg.WebhookToken != "" && !set["webhook-token"]      { *webhookToken = cfg.WebhookToken }
+		if cfg.NatsURL != "" && !set["nats-url"]                { *natsURL = cfg.NatsURL }
+		if cfg.NatsSubject != "" && !set["nats-subject"]        { *natsSubject = cfg.NatsSubject }
+		if cfg.NatsUser != "" && !set["nats-user"]              { *natsUser = cfg.NatsUser }
+		if cfg.NatsPassword != "" && !set["nats-password"]      { *natsPassword = cfg.NatsPassword }
+		if cfg.MqttBroker != "" && !set["mqtt-broker"]          { *mqttBroker = cfg.MqttBroker }
+		if cfg.MqttTopic != "" && !set["mqtt-topic"]            { *mqttTopic = cfg.MqttTopic }
+		if cfg.MqttQoS != nil && !set["mqtt-qos"]               { *mqttQoS = *cfg.MqttQoS }
+		if cfg.MqttClientID != "" && !set["mqtt-client-id"]     { *mqttClientID = cfg.MqttClientID }
 	}
 
 	if *devicesPtr < 1 {
@@ -146,9 +152,9 @@ func main() {
 		if *webhookURL == "" {
 			log.Fatal("--webhook-url is required when --output is webhook")
 		}
-		sink = NewWebhookSink(*webhookURL)
+		sink = NewWebhookSink(*webhookURL, *webhookToken)
 	case "nats":
-		sink, err = NewNatsSink(*natsURL, *natsSubject)
+		sink, err = NewNatsSink(*natsURL, *natsSubject, *natsUser, *natsPassword)
 		if err != nil {
 			log.Fatalf("NATS connection failed: %v", err)
 		}

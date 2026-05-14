@@ -10,11 +10,12 @@ import (
 // WebhookSink sends each data point as a JSON POST request.
 type WebhookSink struct {
 	url    string
+	token  string
 	client *http.Client
 }
 
-func NewWebhookSink(url string) *WebhookSink {
-	return &WebhookSink{url: url, client: &http.Client{}}
+func NewWebhookSink(url, token string) *WebhookSink {
+	return &WebhookSink{url: url, token: token, client: &http.Client{}}
 }
 
 func (s *WebhookSink) Send(dp DataPoint) error {
@@ -22,7 +23,15 @@ func (s *WebhookSink) Send(dp DataPoint) error {
 	if err != nil {
 		return err
 	}
-	resp, err := s.client.Post(s.url, "application/json", bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, s.url, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.token != "" {
+		req.Header.Set("Authorization", "Bearer "+s.token)
+	}
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return err
 	}

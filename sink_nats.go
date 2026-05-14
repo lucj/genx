@@ -12,8 +12,12 @@ type NatsSink struct {
 	subject string
 }
 
-func NewNatsSink(url, subject string) (*NatsSink, error) {
-	nc, err := nats.Connect(url)
+func NewNatsSink(url, subject, user, password string) (*NatsSink, error) {
+	opts := []nats.Option{}
+	if user != "" {
+		opts = append(opts, nats.UserInfo(user, password))
+	}
+	nc, err := nats.Connect(url, opts...)
 	if err != nil {
 		return nil, err
 	}
