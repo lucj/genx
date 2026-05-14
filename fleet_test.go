@@ -93,7 +93,7 @@ func TestSpreadProducesDifferentValues(t *testing.T) {
 	devices := []string{"sensor-0", "sensor-1"}
 	runBatch(fns, sink, devices, time.Now().Unix(), 1, 60)
 
-	if sink.points[0].Value == sink.points[1].Value {
+	if *sink.points[0].Value == *sink.points[1].Value {
 		t.Error("expected different values for devices with different scale factors")
 	}
 }

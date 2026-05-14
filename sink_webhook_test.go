@@ -15,7 +15,7 @@ func TestWebhookSinkNoAuth(t *testing.T) {
 	defer srv.Close()
 
 	sink := NewWebhookSink(srv.URL, "")
-	if err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: 1.0}); err != nil {
+	if err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: func() *float64 { v := 1.0; return &v }()}); err != nil {
 		t.Fatalf("Send error: %v", err)
 	}
 	if gotAuth != "" {
@@ -32,7 +32,7 @@ func TestWebhookSinkBearerToken(t *testing.T) {
 	defer srv.Close()
 
 	sink := NewWebhookSink(srv.URL, "mysecrettoken")
-	if err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: 1.0}); err != nil {
+	if err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: func() *float64 { v := 1.0; return &v }()}); err != nil {
 		t.Fatalf("Send error: %v", err)
 	}
 	if gotAuth != "Bearer mysecrettoken" {
@@ -47,7 +47,7 @@ func TestWebhookSinkNon2xx(t *testing.T) {
 	defer srv.Close()
 
 	sink := NewWebhookSink(srv.URL, "")
-	err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: 1.0})
+	err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: func() *float64 { v := 1.0; return &v }()})
 	if err == nil {
 		t.Error("expected error for 401 response, got nil")
 	}

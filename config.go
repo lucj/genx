@@ -38,6 +38,10 @@ type Config struct {
 	MqttClientID string `yaml:"mqtt-client-id"`
 	MqttUser     string `yaml:"mqtt-user"`
 	MqttPassword string `yaml:"mqtt-password"`
+
+	// Multi-field mode: when set, each key becomes a field in the payload.
+	// Curve flags (--type, --min, etc.) are ignored when Fields is present.
+	Fields map[string]FieldConfig `yaml:"fields"`
 }
 
 func LoadConfig(path string) (*Config, error) {

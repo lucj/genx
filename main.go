@@ -56,28 +56,31 @@ func main() {
 
 	flag.Parse()
 
-	// Apply config file values for any flag not explicitly set on the CLI.
+	// Load config and apply values for flags not explicitly set on the CLI.
+	var cfg *Config
 	if *configPtr != "" {
-		cfg, err := LoadConfig(*configPtr)
+		c, err := LoadConfig(*configPtr)
 		if err != nil {
 			log.Fatalf("failed to load config: %v", err)
 		}
+		cfg = c
 		set := map[string]bool{}
 		flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
 
-		if cfg.Type != "" && !set["type"]               { *typePtr = cfg.Type }
-		if cfg.Duration != "" && !set["duration"]        { *durationPtr = cfg.Duration }
-		if cfg.Step != "" && !set["step"]                { *stepPtr = cfg.Step }
-		if cfg.Device != "" && !set["device"]            { *devicePtr = cfg.Device }
-		if cfg.Devices != nil && !set["devices"]         { *devicesPtr = *cfg.Devices }
-		if cfg.Spread != nil && !set["spread"]           { *spreadPtr = *cfg.Spread }
-		if cfg.Realtime != nil && !set["realtime"]       { *realtimePtr = *cfg.Realtime }
+		if cfg.Type != "" && !set["type"]                       { *typePtr = cfg.Type }
+		if cfg.Duration != "" && !set["duration"]               { *durationPtr = cfg.Duration }
+		if cfg.Step != "" && !set["step"]                       { *stepPtr = cfg.Step }
+		if cfg.Device != "" && !set["device"]                   { *devicePtr = cfg.Device }
+		if cfg.Devices != nil && !set["devices"]                { *devicesPtr = *cfg.Devices }
+		if cfg.Spread != nil && !set["spread"]                  { *spreadPtr = *cfg.Spread }
+		if cfg.Noise != nil && !set["noise"]                    { *noisePtr = *cfg.Noise }
+		if cfg.Realtime != nil && !set["realtime"]              { *realtimePtr = *cfg.Realtime }
 
-		if cfg.First != nil && !set["first"]             { *linearFirst = *cfg.First }
-		if cfg.Last != nil && !set["last"]               { *linearLast = *cfg.Last }
-		if cfg.Min != nil && !set["min"]                 { *cosMin = *cfg.Min }
-		if cfg.Max != nil && !set["max"]                 { *cosMax = *cfg.Max }
-		if cfg.Period != "" && !set["period"]            { *cosPeriod = cfg.Period }
+		if cfg.First != nil && !set["first"]                    { *linearFirst = *cfg.First }
+		if cfg.Last != nil && !set["last"]                      { *linearLast = *cfg.Last }
+		if cfg.Min != nil && !set["min"]                        { *cosMin = *cfg.Min }
+		if cfg.Max != nil && !set["max"]                        { *cosMax = *cfg.Max }
+		if cfg.Period != "" && !set["period"]                   { *cosPeriod = cfg.Period }
 
 		if cfg.Output != "" && !set["output"]                   { *outputPtr = cfg.Output }
 		if cfg.WebhookURL != "" && !set["webhook-url"]          { *webhookURL = cfg.WebhookURL }
@@ -86,7 +89,6 @@ func main() {
 		if cfg.NatsSubject != "" && !set["nats-subject"]        { *natsSubject = cfg.NatsSubject }
 		if cfg.NatsUser != "" && !set["nats-user"]              { *natsUser = cfg.NatsUser }
 		if cfg.NatsPassword != "" && !set["nats-password"]      { *natsPassword = cfg.NatsPassword }
-		if cfg.Noise != nil && !set["noise"]                     { *noisePtr = *cfg.Noise }
 		if cfg.MqttBroker != "" && !set["mqtt-broker"]          { *mqttBroker = cfg.MqttBroker }
 		if cfg.MqttTopic != "" && !set["mqtt-topic"]            { *mqttTopic = cfg.MqttTopic }
 		if cfg.MqttQoS != nil && !set["mqtt-qos"]               { *mqttQoS = *cfg.MqttQoS }
@@ -109,44 +111,16 @@ func main() {
 		log.Fatalf("invalid --step: %v", err)
 	}
 
-	// Build the base mathematical function
 	start := time.Now().Unix()
 
-	var baseFn func(float64) float64
-	switch *typePtr {
-	case "linear":
-		baseFn = GetLinear(*linearFirst, *linearLast, start, durationSeconds)
-	case "cos":
-		var periodSeconds int
-		periodSeconds, err = GetSeconds(*cosPeriod)
-		if err != nil {
-			log.Fatalf("invalid --period: %v", err)
-		}
-		baseFn = GetCosinus(*cosMin, *cosMax, periodSeconds)
-	case "log":
-		baseFn = GetLog(start)
-	case "exp":
-		baseFn = GetExp(start, durationSeconds)
-	default:
-		log.Fatalf("unknown curve type %q (use cos, linear, log, exp)", *typePtr)
-	}
-
-	// Build device names and per-device functions
+	// Build device names
 	devices := make([]string, *devicesPtr)
-	fns := make([]func(float64) float64, *devicesPtr)
 	for i := range devices {
 		if *devicesPtr == 1 {
 			devices[i] = *devicePtr
 		} else {
 			devices[i] = fmt.Sprintf("%s-%d", *devicePtr, i)
 		}
-		scale := 1.0
-		if *spreadPtr > 0 {
-			scale = 1.0 + *spreadPtr*(2*rand.Float64()-1)
-		}
-		fn := baseFn
-		s := scale
-		fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
 	}
 
 	// Build the output sink
@@ -176,6 +150,62 @@ func main() {
 
 	itemCount := durationSeconds / stepSeconds
 
+	// Multi-field mode: only available via config file.
+	if cfg != nil && len(cfg.Fields) > 0 {
+		fieldFns := make(map[string]func(float64) float64, len(cfg.Fields))
+		for name, fc := range cfg.Fields {
+			fn, err := buildFieldFn(fc, start, durationSeconds)
+			if err != nil {
+				log.Fatalf("field %q: %v", name, err)
+			}
+			fieldFns[name] = fn
+		}
+		scales := make([]float64, *devicesPtr)
+		for i := range scales {
+			scales[i] = 1.0
+			if *spreadPtr > 0 {
+				scales[i] = 1.0 + *spreadPtr*(2*rand.Float64()-1)
+			}
+		}
+		if *realtimePtr {
+			runRealtimeMulti(fieldFns, scales, *noisePtr, sink, devices, itemCount, stepSeconds)
+		} else {
+			runBatchMulti(fieldFns, scales, *noisePtr, sink, devices, start, itemCount, stepSeconds)
+		}
+		return
+	}
+
+	// Single-field mode.
+	var baseFn func(float64) float64
+	switch *typePtr {
+	case "linear":
+		baseFn = GetLinear(*linearFirst, *linearLast, start, durationSeconds)
+	case "cos":
+		var periodSeconds int
+		periodSeconds, err = GetSeconds(*cosPeriod)
+		if err != nil {
+			log.Fatalf("invalid --period: %v", err)
+		}
+		baseFn = GetCosinus(*cosMin, *cosMax, periodSeconds)
+	case "log":
+		baseFn = GetLog(start)
+	case "exp":
+		baseFn = GetExp(start, durationSeconds)
+	default:
+		log.Fatalf("unknown curve type %q (use cos, linear, log, exp)", *typePtr)
+	}
+
+	fns := make([]func(float64) float64, *devicesPtr)
+	for i := range fns {
+		scale := 1.0
+		if *spreadPtr > 0 {
+			scale = 1.0 + *spreadPtr*(2*rand.Float64()-1)
+		}
+		fn := baseFn
+		s := scale
+		fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
+	}
+
 	if *realtimePtr {
 		runRealtime(fns, sink, devices, itemCount, stepSeconds)
 	} else {
@@ -188,7 +218,8 @@ func runBatch(fns []func(float64) float64, sink Sink, devices []string, start in
 	for d, device := range devices {
 		for i := 0; i < count; i++ {
 			ts := start + int64(i*stepSeconds)
-			dp := DataPoint{Device: device, Timestamp: ts, Value: fns[d](float64(ts))}
+			v := fns[d](float64(ts))
+			dp := DataPoint{Device: device, Timestamp: ts, Value: &v}
 			if err := sink.Send(dp); err != nil {
 				log.Printf("send error: %v", err)
 			}
@@ -208,7 +239,8 @@ func runRealtime(fns []func(float64) float64, sink Sink, devices []string, count
 			sent := 0
 			for range ticker.C {
 				ts := time.Now().Unix()
-				dp := DataPoint{Device: device, Timestamp: ts, Value: fn(float64(ts))}
+				v := fn(float64(ts))
+				dp := DataPoint{Device: device, Timestamp: ts, Value: &v}
 				if err := sink.Send(dp); err != nil {
 					log.Printf("send error: %v", err)
 				}
@@ -220,4 +252,57 @@ func runRealtime(fns []func(float64) float64, sink Sink, devices []string, count
 		}(device, fns[d])
 	}
 	wg.Wait()
+}
+
+// runBatchMulti generates multi-field data points for each device sequentially.
+func runBatchMulti(fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, start int64, count, stepSeconds int) {
+	for d, device := range devices {
+		scale := scales[d]
+		for i := 0; i < count; i++ {
+			ts := start + int64(i*stepSeconds)
+			dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(fieldFns, scale, noise, float64(ts))}
+			if err := sink.Send(dp); err != nil {
+				log.Printf("send error: %v", err)
+			}
+		}
+	}
+}
+
+// runRealtimeMulti emits multi-field data points per step interval for each device concurrently.
+func runRealtimeMulti(fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, count, stepSeconds int) {
+	var wg sync.WaitGroup
+	for d, device := range devices {
+		wg.Add(1)
+		go func(device string, scale float64) {
+			defer wg.Done()
+			ticker := time.NewTicker(time.Duration(stepSeconds) * time.Second)
+			defer ticker.Stop()
+			sent := 0
+			for range ticker.C {
+				ts := time.Now().Unix()
+				dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(fieldFns, scale, noise, float64(ts))}
+				if err := sink.Send(dp); err != nil {
+					log.Printf("send error: %v", err)
+				}
+				sent++
+				if sent >= count {
+					return
+				}
+			}
+		}(device, scales[d])
+	}
+	wg.Wait()
+}
+
+// evalFields evaluates all field functions at timestamp x, applying scale and noise.
+func evalFields(fieldFns map[string]func(float64) float64, scale, noise, x float64) map[string]float64 {
+	fields := make(map[string]float64, len(fieldFns))
+	for name, fn := range fieldFns {
+		v := fn(x) * scale
+		if noise > 0 {
+			v *= 1 + noise*(2*rand.Float64()-1)
+		}
+		fields[name] = v
+	}
+	return fields
 }
