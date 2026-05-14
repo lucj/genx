@@ -1,0 +1,48 @@
+package main
+
+import (
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config holds values loaded from a YAML config file.
+// Pointer fields distinguish "not set" from a zero value.
+// String fields use "" as the "not set" sentinel.
+type Config struct {
+	Type     string   `yaml:"type"`
+	Duration string   `yaml:"duration"`
+	Step     string   `yaml:"step"`
+	Device   string   `yaml:"device"`
+	Devices  *int     `yaml:"devices"`
+	Spread   *float64 `yaml:"spread"`
+	Realtime *bool    `yaml:"realtime"`
+
+	First  *float64 `yaml:"first"`
+	Last   *float64 `yaml:"last"`
+	Min    *float64 `yaml:"min"`
+	Max    *float64 `yaml:"max"`
+	Period string   `yaml:"period"`
+
+	Output       string `yaml:"output"`
+	WebhookURL   string `yaml:"webhook-url"`
+	NatsURL      string `yaml:"nats-url"`
+	NatsSubject  string `yaml:"nats-subject"`
+	MqttBroker   string `yaml:"mqtt-broker"`
+	MqttTopic    string `yaml:"mqtt-topic"`
+	MqttQoS      *int   `yaml:"mqtt-qos"`
+	MqttClientID string `yaml:"mqtt-client-id"`
+}
+
+func LoadConfig(path string) (*Config, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var cfg Config
+	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}

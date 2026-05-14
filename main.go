@@ -11,6 +11,9 @@ import (
 )
 
 func main() {
+	// Config file flag
+	configPtr := flag.String("config", "", "path to YAML config file (CLI flags take precedence)")
+
 	// Curve flags
 	typePtr := flag.String("type", "cos", "type of curve: cos, linear, log, exp")
 	durationPtr := flag.String("duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
@@ -46,6 +49,39 @@ func main() {
 	mqttClientID := flag.String("mqtt-client-id", fmt.Sprintf("genx-%d", os.Getpid()), "MQTT client ID")
 
 	flag.Parse()
+
+	// Apply config file values for any flag not explicitly set on the CLI.
+	if *configPtr != "" {
+		cfg, err := LoadConfig(*configPtr)
+		if err != nil {
+			log.Fatalf("failed to load config: %v", err)
+		}
+		set := map[string]bool{}
+		flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
+		if cfg.Type != "" && !set["type"]               { *typePtr = cfg.Type }
+		if cfg.Duration != "" && !set["duration"]        { *durationPtr = cfg.Duration }
+		if cfg.Step != "" && !set["step"]                { *stepPtr = cfg.Step }
+		if cfg.Device != "" && !set["device"]            { *devicePtr = cfg.Device }
+		if cfg.Devices != nil && !set["devices"]         { *devicesPtr = *cfg.Devices }
+		if cfg.Spread != nil && !set["spread"]           { *spreadPtr = *cfg.Spread }
+		if cfg.Realtime != nil && !set["realtime"]       { *realtimePtr = *cfg.Realtime }
+
+		if cfg.First != nil && !set["first"]             { *linearFirst = *cfg.First }
+		if cfg.Last != nil && !set["last"]               { *linearLast = *cfg.Last }
+		if cfg.Min != nil && !set["min"]                 { *cosMin = *cfg.Min }
+		if cfg.Max != nil && !set["max"]                 { *cosMax = *cfg.Max }
+		if cfg.Period != "" && !set["period"]            { *cosPeriod = cfg.Period }
+
+		if cfg.Output != "" && !set["output"]            { *outputPtr = cfg.Output }
+		if cfg.WebhookURL != "" && !set["webhook-url"]   { *webhookURL = cfg.WebhookURL }
+		if cfg.NatsURL != "" && !set["nats-url"]         { *natsURL = cfg.NatsURL }
+		if cfg.NatsSubject != "" && !set["nats-subject"] { *natsSubject = cfg.NatsSubject }
+		if cfg.MqttBroker != "" && !set["mqtt-broker"]   { *mqttBroker = cfg.MqttBroker }
+		if cfg.MqttTopic != "" && !set["mqtt-topic"]     { *mqttTopic = cfg.MqttTopic }
+		if cfg.MqttQoS != nil && !set["mqtt-qos"]        { *mqttQoS = *cfg.MqttQoS }
+		if cfg.MqttClientID != "" && !set["mqtt-client-id"] { *mqttClientID = cfg.MqttClientID }
+	}
 
 	if *devicesPtr < 1 {
 		log.Fatal("--devices must be at least 1")
