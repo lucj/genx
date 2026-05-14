@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -13,7 +15,9 @@ func main() {
 	typePtr := flag.String("type", "cos", "type of curve: cos, linear, log, exp")
 	durationPtr := flag.String("duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
 	stepPtr := flag.String("step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
-	devicePtr := flag.String("device", "device", "device/sensor name included in each data point")
+	devicePtr := flag.String("device", "device", "device/sensor name (or prefix when --devices > 1)")
+	devicesPtr := flag.Int("devices", 1, "number of devices to simulate simultaneously")
+	spreadPtr := flag.Float64("spread", 0.0, "per-device value spread as a ratio, e.g. 0.1 = ±10%")
 	realtimePtr := flag.Bool("realtime", false, "real-time mode: emit one point per step interval")
 
 	// Linear curve flags
@@ -43,6 +47,10 @@ func main() {
 
 	flag.Parse()
 
+	if *devicesPtr < 1 {
+		log.Fatal("--devices must be at least 1")
+	}
+
 	// Parse durations
 	durationSeconds, err := GetSeconds(*durationPtr)
 	if err != nil {
@@ -53,26 +61,44 @@ func main() {
 		log.Fatalf("invalid --step: %v", err)
 	}
 
-	// Build the mathematical function
+	// Build the base mathematical function
 	start := time.Now().Unix()
 
-	var fn func(float64) float64
+	var baseFn func(float64) float64
 	switch *typePtr {
 	case "linear":
-		fn = GetLinear(*linearFirst, *linearLast, start, durationSeconds)
+		baseFn = GetLinear(*linearFirst, *linearLast, start, durationSeconds)
 	case "cos":
 		var periodSeconds int
 		periodSeconds, err = GetSeconds(*cosPeriod)
 		if err != nil {
 			log.Fatalf("invalid --period: %v", err)
 		}
-		fn = GetCosinus(*cosMin, *cosMax, periodSeconds)
+		baseFn = GetCosinus(*cosMin, *cosMax, periodSeconds)
 	case "log":
-		fn = GetLog(start)
+		baseFn = GetLog(start)
 	case "exp":
-		fn = GetExp(start, durationSeconds)
+		baseFn = GetExp(start, durationSeconds)
 	default:
 		log.Fatalf("unknown curve type %q (use cos, linear, log, exp)", *typePtr)
+	}
+
+	// Build device names and per-device functions
+	devices := make([]string, *devicesPtr)
+	fns := make([]func(float64) float64, *devicesPtr)
+	for i := range devices {
+		if *devicesPtr == 1 {
+			devices[i] = *devicePtr
+		} else {
+			devices[i] = fmt.Sprintf("%s-%d", *devicePtr, i)
+		}
+		scale := 1.0
+		if *spreadPtr > 0 {
+			scale = 1.0 + *spreadPtr*(2*rand.Float64()-1)
+		}
+		fn := baseFn
+		s := scale
+		fns[i] = func(x float64) float64 { return fn(x) * s }
 	}
 
 	// Build the output sink
@@ -103,38 +129,47 @@ func main() {
 	itemCount := durationSeconds / stepSeconds
 
 	if *realtimePtr {
-		runRealtime(fn, sink, *devicePtr, itemCount, stepSeconds)
+		runRealtime(fns, sink, devices, itemCount, stepSeconds)
 	} else {
-		runBatch(fn, sink, *devicePtr, start, itemCount, stepSeconds)
+		runBatch(fns, sink, devices, start, itemCount, stepSeconds)
 	}
 }
 
-// runBatch generates all data points immediately, spacing timestamps by stepSeconds.
-func runBatch(fn func(float64) float64, sink Sink, device string, start int64, count, stepSeconds int) {
-	for i := 0; i < count; i++ {
-		ts := start + int64(i*stepSeconds)
-		dp := DataPoint{Device: device, Timestamp: ts, Value: fn(float64(ts))}
-		if err := sink.Send(dp); err != nil {
-			log.Printf("send error: %v", err)
+// runBatch generates all data points immediately for each device, spacing timestamps by stepSeconds.
+func runBatch(fns []func(float64) float64, sink Sink, devices []string, start int64, count, stepSeconds int) {
+	for d, device := range devices {
+		for i := 0; i < count; i++ {
+			ts := start + int64(i*stepSeconds)
+			dp := DataPoint{Device: device, Timestamp: ts, Value: fns[d](float64(ts))}
+			if err := sink.Send(dp); err != nil {
+				log.Printf("send error: %v", err)
+			}
 		}
 	}
 }
 
-// runRealtime emits one data point per step interval using the actual current time.
-func runRealtime(fn func(float64) float64, sink Sink, device string, count, stepSeconds int) {
-	ticker := time.NewTicker(time.Duration(stepSeconds) * time.Second)
-	defer ticker.Stop()
-
-	sent := 0
-	for range ticker.C {
-		ts := time.Now().Unix()
-		dp := DataPoint{Device: device, Timestamp: ts, Value: fn(float64(ts))}
-		if err := sink.Send(dp); err != nil {
-			log.Printf("send error: %v", err)
-		}
-		sent++
-		if sent >= count {
-			return
-		}
+// runRealtime emits one data point per step interval for each device concurrently.
+func runRealtime(fns []func(float64) float64, sink Sink, devices []string, count, stepSeconds int) {
+	var wg sync.WaitGroup
+	for d, device := range devices {
+		wg.Add(1)
+		go func(device string, fn func(float64) float64) {
+			defer wg.Done()
+			ticker := time.NewTicker(time.Duration(stepSeconds) * time.Second)
+			defer ticker.Stop()
+			sent := 0
+			for range ticker.C {
+				ts := time.Now().Unix()
+				dp := DataPoint{Device: device, Timestamp: ts, Value: fn(float64(ts))}
+				if err := sink.Send(dp); err != nil {
+					log.Printf("send error: %v", err)
+				}
+				sent++
+				if sent >= count {
+					return
+				}
+			}
+		}(device, fns[d])
 	}
+	wg.Wait()
 }
