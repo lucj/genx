@@ -10,7 +10,7 @@ Items marked ✅ are implemented.
 
 These are picked for differentiation — no other lightweight CLI simulator does all three well:
 
-1. **Multi-field payloads** — closes the biggest gap vs real IoT devices; makes the tool credible for actual teams, not just demos
+1. ~~**Multi-field payloads**~~ ✅ — closes the biggest gap vs real IoT devices; makes the tool credible for actual teams, not just demos
 2. **Anomaly injection** — unique angle: test your alerting pipeline without crafting edge cases by hand
 3. **Reproducible runs (`--seed`)** — makes genx CI-ready and scenario-shareable; rare in data simulation tools
 
@@ -33,9 +33,16 @@ Simulates connectivity loss or sensor failure; lets consumers prove they handle 
 Pair with anomaly injection for a full fault-simulation mode.
 
 ### 🔴 Reproducible runs (`--seed <int>`)
-Fix the random seed so every run produces identical output.
-Essential for CI (assert exact values), sharing scenarios with colleagues, and regression testing.
-Currently impossible because noise and spread re-roll on every invocation.
+Fix the random number generator seed so every run with the same parameters produces identical output.
+`math/rand/v2` auto-seeds randomly at startup, so noise and spread differ on every invocation.
+With `--seed 42`, the sequence is deterministic — useful for:
+- CI tests that assert exact output values
+- Sharing a scenario reproducibly ("run with `--seed 42` to get what I saw")
+- Debugging an anomaly from a specific past run
+
+Note: this is different from **replay mode** (a separate feature), which feeds a previously
+recorded JSON/CSV file back through a sink. `--seed` is purely about making the random
+generator deterministic, not about replaying real captured data.
 
 ---
 
@@ -64,30 +71,10 @@ Useful for simulating on/off equipment cycles (pumps, valves, HVAC units).
 
 ## Richer data model
 
-### 🔴 Multi-field payloads
-Emit `{temperature: 22.4, humidity: 58.1, pressure: 1013.2}` instead of a single `value`.
-This is the single biggest gap vs real IoT devices. Implementation sketch:
-
-```yaml
-# scenario.yaml
-fields:
-  temperature:
-    type: cos
-    min: 15
-    max: 30
-  humidity:
-    type: linear
-    first: 40
-    last: 80
-  pressure:
-    type: cos
-    min: 1000
-    max: 1020
-    period: 12h
-```
-
-Each field is an independent curve; all share the same timestamp and device name.
-Would require a small schema parser but no changes to the sink interface.
+### ✅ Multi-field payloads
+Emit `{"fields": {"temperature": 22.4, "humidity": 58.1, "pressure": 1013.2}}` instead of a single `value`.
+Available via config file only (CLI flags remain single-value). Each field has its own
+independent curve type and parameters. Spread and noise apply per-field per-sample.
 
 ### 🟢 CSV output
 `--format csv` on the stdout sink.
