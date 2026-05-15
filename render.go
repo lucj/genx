@@ -7,6 +7,14 @@ import (
 	"text/template"
 )
 
+// Renderer serialises a DataPoint to bytes for a sink to transmit.
+type Renderer func(DataPoint) ([]byte, error)
+
+// JSONRenderer is the default renderer — plain JSON marshalling.
+func JSONRenderer(dp DataPoint) ([]byte, error) {
+	return json.Marshal(dp)
+}
+
 // templateData is the value passed to a payload template on each render.
 type templateData struct {
 	Device    string
@@ -15,46 +23,31 @@ type templateData struct {
 	Fields    map[string]float64
 }
 
-// payloadTmpl is non-nil when a payload template has been configured.
-var payloadTmpl *template.Template
+// NewTemplateRenderer returns a Renderer that executes tmpl and validates the
+// output as JSON before returning it.
+func NewTemplateRenderer(tmpl *template.Template) Renderer {
+	return func(dp DataPoint) ([]byte, error) {
+		td := templateData{
+			Device:    dp.Device,
+			Timestamp: dp.Timestamp,
+			Fields:    dp.Fields,
+		}
+		if dp.Value != nil {
+			td.Value = *dp.Value
+		}
+		if td.Fields == nil {
+			td.Fields = map[string]float64{}
+		}
 
-// initTemplate parses tmplStr and stores it for use by renderPayload.
-func initTemplate(tmplStr string) error {
-	t, err := template.New("payload").Parse(tmplStr)
-	if err != nil {
-		return err
-	}
-	payloadTmpl = t
-	return nil
-}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, td); err != nil {
+			return nil, fmt.Errorf("template render error: %w", err)
+		}
 
-// renderPayload serialises dp either through the configured template or as JSON.
-// When a template is active the rendered output is validated as JSON before returning.
-func renderPayload(dp DataPoint) ([]byte, error) {
-	if payloadTmpl == nil {
-		return json.Marshal(dp)
+		out := buf.Bytes()
+		if !json.Valid(out) {
+			return nil, fmt.Errorf("rendered template is not valid JSON: %s", out)
+		}
+		return out, nil
 	}
-
-	td := templateData{
-		Device:    dp.Device,
-		Timestamp: dp.Timestamp,
-		Fields:    dp.Fields,
-	}
-	if dp.Value != nil {
-		td.Value = *dp.Value
-	}
-	if td.Fields == nil {
-		td.Fields = map[string]float64{}
-	}
-
-	var buf bytes.Buffer
-	if err := payloadTmpl.Execute(&buf, td); err != nil {
-		return nil, fmt.Errorf("template render error: %w", err)
-	}
-
-	out := buf.Bytes()
-	if !json.Valid(out) {
-		return nil, fmt.Errorf("rendered template is not valid JSON: %s", out)
-	}
-	return out, nil
 }

@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
+	"time"
 )
 
 // WebhookSink sends each data point as a JSON POST request.
@@ -11,14 +13,20 @@ type WebhookSink struct {
 	url    string
 	token  string
 	client *http.Client
+	render Renderer
 }
 
-func NewWebhookSink(url, token string) *WebhookSink {
-	return &WebhookSink{url: url, token: token, client: &http.Client{}}
+func NewWebhookSink(url, token string, render Renderer) *WebhookSink {
+	return &WebhookSink{
+		url:    url,
+		token:  token,
+		render: render,
+		client: &http.Client{Timeout: 30 * time.Second},
+	}
 }
 
 func (s *WebhookSink) Send(dp DataPoint) error {
-	b, err := renderPayload(dp)
+	b, err := s.render(dp)
 	if err != nil {
 		return err
 	}
@@ -35,6 +43,7 @@ func (s *WebhookSink) Send(dp DataPoint) error {
 		return err
 	}
 	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) // drain so the connection can be reused
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook returned non-2xx status: %s", resp.Status)
 	}

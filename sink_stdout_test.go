@@ -18,7 +18,7 @@ func TestStdoutSinkSend(t *testing.T) {
 
 	v := 42.5
 	dp := DataPoint{Device: "dev1", Timestamp: 1000, Value: &v}
-	sink := NewStdoutSink()
+	sink := NewStdoutSink(JSONRenderer)
 	if err := sink.Send(dp); err != nil {
 		w.Close()
 		os.Stdout = old
@@ -42,7 +42,7 @@ func TestStdoutSinkSend(t *testing.T) {
 }
 
 func TestStdoutSinkClose(t *testing.T) {
-	if err := NewStdoutSink().Close(); err != nil {
+	if err := NewStdoutSink(JSONRenderer).Close(); err != nil {
 		t.Errorf("Close should return nil, got %v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -14,10 +15,10 @@ import (
 // In realtime mode it waits stepSeconds between sends and stamps the current time.
 // In batch mode it sends all points immediately, preserving original timestamps.
 // It stops early if ctx is cancelled.
-func runReplay(ctx context.Context, filePath string, sink Sink, realtime bool, stepSeconds int) {
+func runReplay(ctx context.Context, filePath string, sink Sink, realtime bool, stepSeconds int) error {
 	f, err := os.Open(filePath)
 	if err != nil {
-		log.Fatalf("replay: cannot open file: %v", err)
+		return fmt.Errorf("replay: cannot open file: %w", err)
 	}
 	defer f.Close()
 
@@ -42,7 +43,7 @@ func runReplay(ctx context.Context, filePath string, sink Sink, realtime bool, s
 		if realtime {
 			select {
 			case <-ctx.Done():
-				return
+				return nil
 			case <-ticker.C:
 			}
 			dp.Timestamp = time.Now().Unix()
@@ -54,4 +55,5 @@ func runReplay(ctx context.Context, filePath string, sink Sink, realtime bool, s
 	if err := scanner.Err(); err != nil {
 		log.Printf("replay: read error: %v", err)
 	}
+	return nil
 }
