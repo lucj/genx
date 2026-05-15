@@ -73,31 +73,111 @@ $ docker run ghcr.io/lucj/genx -type exp -duration 6h -step 30m
 ...
 ```
 
+### Random walk
+
+Drifts by a random delta each sample — useful for simulating battery drain, temperature drift, or stock prices.
+
+```
+$ genx --type walk --walk-start 100 --walk-step 2 --walk-bias -0.1 \
+       --walk-min 0 --walk-max 120 --duration 1h --step 1m
+{"device":"device","timestamp":1715000000,"value":100.00}
+{"device":"device","timestamp":1715000060,"value":98.73}
+{"device":"device","timestamp":1715000120,"value":97.21}
+...
+```
+
+`--walk-bias` adds a constant drift per step (negative = downward trend). `--walk-min` / `--walk-max` clamp the value; clamping is disabled when both are `0`.
+
+## Fleet mode
+
+Simulate multiple devices at once with `--devices`. Each device gets an independent value curve; `--spread` adds a per-device random offset so they don't all emit identical values.
+
+```
+$ genx --type cos --devices 3 --spread 0.1 --duration 1h --step 5m --realtime
+{"device":"device-0","timestamp":1715000000,"value":24.10}
+{"device":"device-1","timestamp":1715000000,"value":23.57}
+{"device":"device-2","timestamp":1715000000,"value":25.02}
+...
+```
+
+`--spread 0.1` means each device's values are randomly scaled by ±10%. Use `--device` to set the prefix (`--device sensor` → `sensor-0`, `sensor-1`, …).
+
+## Noise
+
+Add realistic random jitter to every sample with `--noise`:
+
+```
+$ genx --type cos --noise 0.05 --duration 1h --step 1m
+```
+
+`--noise 0.05` multiplies each value by a random factor in `[0.95, 1.05]`. Works in both single-device and fleet mode.
+
+## Realtime mode
+
+By default genx generates the full dataset instantly (batch mode). Add `--realtime` to emit one point per `--step` interval using the actual wall clock — handy for live pipeline testing.
+
+```
+$ docker run ghcr.io/lucj/genx -type cos -min 18 -max 26 -duration 1h -step 10s --realtime
+```
+
+## Reproducible runs
+
+Use `--seed` to fix the random number generator so every run with the same flags produces identical output. Useful for CI fixtures and sharing reproducible scenarios.
+
+```
+$ genx --type cos --noise 0.05 --devices 3 --spread 0.1 --seed 42 --duration 1h --step 5m
+```
+
+## Replay mode
+
+Replay a previously recorded JSON-lines file through any configured sink. Batch mode sends all points immediately; realtime mode waits `--step` between sends and stamps the current time.
+
+```
+# Record
+$ genx --type cos --duration 1h --step 1m > recording.jsonl
+
+# Replay to NATS in realtime
+$ genx --replay-file recording.jsonl --output nats --nats-url nats://localhost:4222 \
+       --realtime --step 1m
+```
+
 ## Output sinks
 
 By default data is written to stdout. Use `--output` to route it elsewhere.
 
 ### Webhook
 
-POSTs each data point as JSON to an HTTP endpoint.
+POSTs each data point as JSON to an HTTP endpoint. Optionally attach a bearer token:
 
 ```
-$ docker run ghcr.io/lucj/genx -type cos -duration 1h -step 5m \
-    -output webhook -webhook-url http://myserver/ingest
+$ genx --type cos --duration 1h --step 5m \
+       --output webhook --webhook-url http://myserver/ingest \
+       --webhook-token mysecrettoken
 ```
 
 ### NATS
 
-Publishes to a NATS subject.
+Publishes to a NATS subject. Supports username/password and token authentication:
 
 ```
-$ docker run ghcr.io/lucj/genx -type linear -duration 1h -step 1m \
-    -output nats -nats-url nats://<NATS_HOST>:4222 -nats-subject sensors.temp
+# No auth
+$ genx --output nats --nats-url nats://localhost:4222 --nats-subject sensors.temp \
+       --type cos --duration 1h --step 1m
+
+# Username / password
+$ genx --output nats --nats-url nats://localhost:4222 \
+       --nats-user alice --nats-password secret \
+       --type cos --duration 1h --step 1m --realtime
+
+# Token
+$ genx --output nats --nats-url nats://localhost:4222 \
+       --nats-token mysecrettoken \
+       --type cos --duration 1h --step 1m --realtime
 ```
 
 **End-to-end example with a containerised NATS server:**
 
-```
+```bash
 # 1. shared network
 docker network create genx-net
 
@@ -114,42 +194,163 @@ docker run --network genx-net ghcr.io/lucj/genx \
     -output nats -nats-url nats://nats:4222 -nats-subject sensors.temp
 ```
 
+A `docker-compose.yml` is included to start NATS instances with user/password and token auth for local testing — see the comments inside for usage instructions.
+
 ### MQTT
 
-Publishes to an MQTT topic.
+Publishes to an MQTT topic. Supports username/password authentication:
 
 ```
-$ docker run ghcr.io/lucj/genx -type cos -duration 1h -step 5m \
-    -output mqtt -mqtt-broker tcp://<MQTT_HOST>:1883 -mqtt-topic home/temperature
+$ genx --type cos --duration 1h --step 5m \
+       --output mqtt --mqtt-broker tcp://localhost:1883 --mqtt-topic home/temperature \
+       --mqtt-user myuser --mqtt-password mypassword
 ```
 
-## Realtime mode
+## Multi-field payloads
 
-By default genx generates the full dataset instantly (batch mode). Add `--realtime` to emit one point per `--step` interval using the actual wall clock — handy for live pipeline testing.
+Emit multiple named fields in a single data point — for example temperature, humidity, and pressure from the same device. This mode is available via a YAML config file (see below).
+
+Example config (`multi.yaml`):
+```yaml
+duration: 1h
+step: 1m
+realtime: true
+device: env-sensor
+
+fields:
+  temperature:
+    type: cos
+    min: 18
+    max: 26
+    period: 12h
+  humidity:
+    type: cos
+    min: 40
+    max: 80
+    period: 8h
+  pressure:
+    type: linear
+    first: 1010
+    last: 1015
+```
 
 ```
-$ docker run ghcr.io/lucj/genx -type cos -min 18 -max 26 -duration 1h -step 10s --realtime
+$ genx --config multi.yaml
+{"device":"env-sensor","timestamp":1715000000,"fields":{"humidity":60.12,"pressure":1010.00,"temperature":22.43}}
+```
+
+## Custom payload template
+
+Define the exact JSON shape using Go [`text/template`](https://pkg.go.dev/text/template) syntax. Useful when the consuming system expects a specific schema.
+
+Available placeholders:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{{.Device}}` | Device name |
+| `{{.Timestamp}}` | Unix timestamp (int64) |
+| `{{.Value}}` | Numeric value (0 if multi-field mode) |
+| `{{.Fields.name}}` | Named field value (multi-field mode) |
+
+**Inline template:**
+
+```
+$ genx --type cos --duration 1h --step 5m \
+       --payload-template '{"sensor":"{{.Device}}","time":{{.Timestamp}},"celsius":{{.Value}}}'
+{"sensor":"device","time":1715000000,"celsius":24.53}
+```
+
+**Template file:**
+
+```
+# template.json
+{
+  "sensor_id": "{{.Device}}",
+  "recorded_at": {{.Timestamp}},
+  "measurements": {
+    "temperature": {{.Fields.temperature}},
+    "humidity":    {{.Fields.humidity}}
+  }
+}
+```
+
+```
+$ genx --config multi.yaml --payload-template-file template.json
+```
+
+Template can also be set in the YAML config:
+```yaml
+payload-template: '{"id":"{{.Device}}","ts":{{.Timestamp}},"val":{{.Value}}}'
+# or
+payload-template-file: template.json
+```
+
+## YAML config file
+
+Any flag can be set in a YAML config file passed with `--config`. CLI flags always take precedence over config values.
+
+```yaml
+type: cos
+duration: 24h
+step: 5m
+device: room-sensor
+realtime: true
+noise: 0.03
+seed: 42
+
+min: 18
+max: 26
+period: 12h
+
+output: nats
+nats-url: nats://localhost:4222
+nats-subject: home.temperature
+nats-user: alice
+nats-password: secret
+```
+
+```
+$ genx --config config.yaml
 ```
 
 ## All flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-type` | `cos` | Curve type: `cos`, `linear`, `log`, `exp` |
-| `-duration` | `1d` | Total duration (e.g. `2d`, `6h`, `30m`) |
-| `-step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |
-| `-device` | `device` | Device/sensor name in each data point |
-| `-realtime` | false | Emit one point per step using real time |
-| `-min` | `10` | Min value (cos) |
-| `-max` | `25` | Max value (cos) |
-| `-period` | `1d` | Period (cos) |
-| `-first` | `0` | First value (linear) |
-| `-last` | `1` | Last value (linear) |
-| `-output` | `stdout` | Output sink: `stdout`, `webhook`, `nats`, `mqtt` |
-| `-webhook-url` | | Webhook endpoint URL |
-| `-nats-url` | `nats://<NATS_HOST>:4222` | NATS server URL |
-| `-nats-subject` | `genx` | NATS subject |
-| `-mqtt-broker` | `tcp://<MQTT_HOST>:1883` | MQTT broker URL |
-| `-mqtt-topic` | `genx` | MQTT topic |
-| `-mqtt-qos` | `0` | MQTT QoS level (0, 1, 2) |
-| `-mqtt-client-id` | `genx-<pid>` | MQTT client ID |
+| `--config` | | Path to YAML config file (CLI flags take precedence) |
+| `--type` | `cos` | Curve type: `cos`, `linear`, `log`, `exp`, `walk` |
+| `--duration` | `1d` | Total duration (e.g. `2d`, `6h`, `30m`) |
+| `--step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |
+| `--device` | `device` | Device name (or prefix when `--devices > 1`) |
+| `--devices` | `1` | Number of devices to simulate simultaneously |
+| `--spread` | `0` | Per-device value spread as a ratio (e.g. `0.1` = ±10%) |
+| `--noise` | `0` | Random noise per sample as a ratio (e.g. `0.05` = ±5%) |
+| `--realtime` | false | Emit one point per step using real wall-clock time |
+| `--seed` | `0` | Fix the RNG seed for reproducible output (0 = random) |
+| `--min` | `10` | Min value (cos) |
+| `--max` | `25` | Max value (cos) |
+| `--period` | `1d` | Period (cos) |
+| `--first` | `0` | First value (linear) |
+| `--last` | `1` | Last value (linear) |
+| `--walk-start` | `100` | Starting value (walk) |
+| `--walk-step` | `1` | Max delta magnitude per sample (walk) |
+| `--walk-bias` | `0` | Per-step directional drift (walk); negative = downward |
+| `--walk-min` | `0` | Lower clamp bound (walk); disabled when equal to `--walk-max` |
+| `--walk-max` | `0` | Upper clamp bound (walk); disabled when equal to `--walk-min` |
+| `--output` | `stdout` | Output sink: `stdout`, `webhook`, `nats`, `mqtt` |
+| `--replay-file` | | Path to a JSON-lines file to replay through the sink |
+| `--webhook-url` | | Webhook endpoint URL |
+| `--webhook-token` | | Bearer token for the `Authorization` header |
+| `--nats-url` | `nats://localhost:4222` | NATS server URL |
+| `--nats-subject` | `genx` | NATS subject to publish to |
+| `--nats-user` | | NATS username |
+| `--nats-password` | | NATS password |
+| `--nats-token` | | NATS authentication token |
+| `--mqtt-broker` | `tcp://localhost:1883` | MQTT broker URL |
+| `--mqtt-topic` | `genx` | MQTT topic to publish to |
+| `--mqtt-qos` | `0` | MQTT QoS level (0, 1, or 2) |
+| `--mqtt-client-id` | `genx-<pid>` | MQTT client ID |
+| `--mqtt-user` | | MQTT username |
+| `--mqtt-password` | | MQTT password |
+| `--payload-template` | | Go `text/template` string for the JSON payload |
+| `--payload-template-file` | | Path to a Go `text/template` file for the JSON payload |
