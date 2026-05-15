@@ -105,10 +105,10 @@ Flags always take precedence over config values.
 NATS (`--nats-user`/`--nats-password` or `--nats-token`), MQTT (`--mqtt-user`, `--mqtt-password`),
 webhook (`--webhook-token`).
 
-### 🔴 Graceful shutdown
-Currently Ctrl+C in realtime fleet mode kills goroutines mid-flight.
-Catch `SIGINT`/`SIGTERM`, signal each device goroutine to stop after its current point,
-then drain sinks before exiting. Correctness fix more than a feature.
+### ✅ Graceful shutdown
+`SIGINT`/`SIGTERM` (Ctrl+C) cancels a shared `context.Context`; each realtime
+goroutine exits cleanly after its current point. Sinks drain before the process exits.
+Works for single-device, fleet, multi-field, and replay realtime modes.
 
 ### ✅ Replay mode (`--replay-file`)
 Feed a recorded JSON-lines file back through any sink.

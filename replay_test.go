@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -29,7 +30,7 @@ func TestReplayBatchSingleField(t *testing.T) {
 	path := writeTempReplayFile(t, lines)
 	sink := &captureSink{}
 
-	runReplay(path, sink, false, 0)
+	runReplay(context.Background(), path, sink, false, 0)
 
 	if len(sink.points) != 3 {
 		t.Fatalf("expected 3 points, got %d", len(sink.points))
@@ -50,7 +51,7 @@ func TestReplayBatchMultiField(t *testing.T) {
 	path := writeTempReplayFile(t, lines)
 	sink := &captureSink{}
 
-	runReplay(path, sink, false, 0)
+	runReplay(context.Background(), path, sink, false, 0)
 
 	if len(sink.points) != 2 {
 		t.Fatalf("expected 2 points, got %d", len(sink.points))
@@ -69,7 +70,7 @@ func TestReplaySkipsInvalidLines(t *testing.T) {
 	path := writeTempReplayFile(t, lines)
 	sink := &captureSink{}
 
-	runReplay(path, sink, false, 0)
+	runReplay(context.Background(), path, sink, false, 0)
 
 	if len(sink.points) != 2 {
 		t.Fatalf("expected 2 valid points (invalid line skipped), got %d", len(sink.points))
@@ -85,7 +86,7 @@ func TestReplaySkipsEmptyLines(t *testing.T) {
 	path := writeTempReplayFile(t, lines)
 	sink := &captureSink{}
 
-	runReplay(path, sink, false, 0)
+	runReplay(context.Background(), path, sink, false, 0)
 
 	if len(sink.points) != 2 {
 		t.Fatalf("expected 2 points (empty line skipped), got %d", len(sink.points))
@@ -99,7 +100,7 @@ func TestReplayPreservesTimestampInBatchMode(t *testing.T) {
 	path := writeTempReplayFile(t, lines)
 	sink := &captureSink{}
 
-	runReplay(path, sink, false, 0)
+	runReplay(context.Background(), path, sink, false, 0)
 
 	if sink.points[0].Timestamp != 9999 {
 		t.Errorf("batch mode should preserve original timestamp, got %d", sink.points[0].Timestamp)

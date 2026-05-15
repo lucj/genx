@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -12,7 +13,8 @@ import (
 // runReplay reads JSON-lines from filePath and sends each DataPoint through sink.
 // In realtime mode it waits stepSeconds between sends and stamps the current time.
 // In batch mode it sends all points immediately, preserving original timestamps.
-func runReplay(filePath string, sink Sink, realtime bool, stepSeconds int) {
+// It stops early if ctx is cancelled.
+func runReplay(ctx context.Context, filePath string, sink Sink, realtime bool, stepSeconds int) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		log.Fatalf("replay: cannot open file: %v", err)
@@ -38,7 +40,11 @@ func runReplay(filePath string, sink Sink, realtime bool, stepSeconds int) {
 			continue
 		}
 		if realtime {
-			<-ticker.C
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 			dp.Timestamp = time.Now().Unix()
 		}
 		if err := sink.Send(dp); err != nil {
