@@ -169,7 +169,11 @@ func main() {
 	default:
 		log.Fatalf("unknown output %q (use stdout, webhook, nats, mqtt)", *outputPtr)
 	}
-	defer sink.Close()
+	defer func() {
+		if err := sink.Close(); err != nil {
+			log.Printf("sink close error: %v", err)
+		}
+	}()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -275,7 +279,6 @@ func main() {
 			fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
 		}
 	}
-
 	if *realtimePtr {
 		runRealtime(ctx, fns, sink, devices, itemCount, stepSeconds)
 	} else {
