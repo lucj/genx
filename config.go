@@ -40,6 +40,7 @@ type Config struct {
 	NatsSubject  string `yaml:"nats-subject"`
 	NatsUser     string `yaml:"nats-user"`
 	NatsPassword string `yaml:"nats-password"`
+	NatsToken    string `yaml:"nats-token"`
 	MqttBroker   string `yaml:"mqtt-broker"`
 	MqttTopic    string `yaml:"mqtt-topic"`
 	MqttQoS      *int   `yaml:"mqtt-qos"`

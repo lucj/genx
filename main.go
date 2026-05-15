@@ -55,6 +55,7 @@ func main() {
 	natsSubject := flag.String("nats-subject", "genx", "NATS subject to publish to")
 	natsUser := flag.String("nats-user", "", "NATS username")
 	natsPassword := flag.String("nats-password", "", "NATS password")
+	natsToken := flag.String("nats-token", "", "NATS token (used when --nats-user is not set)")
 
 	// MQTT flags
 	mqttBroker := flag.String("mqtt-broker", "tcp://localhost:1883", "MQTT broker URL")
@@ -106,6 +107,7 @@ func main() {
 		if cfg.NatsSubject != "" && !set["nats-subject"]        { *natsSubject = cfg.NatsSubject }
 		if cfg.NatsUser != "" && !set["nats-user"]              { *natsUser = cfg.NatsUser }
 		if cfg.NatsPassword != "" && !set["nats-password"]      { *natsPassword = cfg.NatsPassword }
+		if cfg.NatsToken != "" && !set["nats-token"]            { *natsToken = cfg.NatsToken }
 		if cfg.MqttBroker != "" && !set["mqtt-broker"]          { *mqttBroker = cfg.MqttBroker }
 		if cfg.MqttTopic != "" && !set["mqtt-topic"]            { *mqttTopic = cfg.MqttTopic }
 		if cfg.MqttQoS != nil && !set["mqtt-qos"]               { *mqttQoS = *cfg.MqttQoS }
@@ -131,7 +133,7 @@ func main() {
 		}
 		sink = NewWebhookSink(*webhookURL, *webhookToken)
 	case "nats":
-		sink, err = NewNatsSink(*natsURL, *natsSubject, *natsUser, *natsPassword)
+		sink, err = NewNatsSink(*natsURL, *natsSubject, *natsUser, *natsPassword, *natsToken)
 		if err != nil {
 			log.Fatalf("NATS connection failed: %v", err)
 		}
