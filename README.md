@@ -20,21 +20,6 @@ go build -o genx . && ./genx [flags]
 
 ## Curve types
 
-### Cosine
-
-Oscillates between `--min` and `--max` over the given `--period`.
-
-```
-$ docker run ghcr.io/lucj/genx -type cos -duration 2d -min 20 -max 30 -step 3h -period 1d
-{"device":"device","timestamp":1715000000,"value":30.00}
-{"device":"device","timestamp":1715010800,"value":27.50}
-{"device":"device","timestamp":1715021600,"value":22.50}
-{"device":"device","timestamp":1715032400,"value":20.00}
-...
-```
-
-![Cosinus graph](/images/cos.png)
-
 ### Linear
 
 Ramps from `--first` to `--last` over the total duration.
@@ -47,7 +32,33 @@ $ docker run ghcr.io/lucj/genx -type linear -duration 3d -first 10 -last 30 -ste
 ...
 ```
 
-![Linear graph](/images/linear.png)
+### Random walk
+
+Drifts by a random delta each sample — useful for simulating battery drain, temperature drift, or stock prices.
+
+```
+$ genx --type walk --walk-start 100 --walk-step 2 --walk-bias -0.1 \
+       --walk-min 0 --walk-max 120 --duration 1h --step 1m
+{"device":"device","timestamp":1715000000,"value":100.00}
+{"device":"device","timestamp":1715000060,"value":98.73}
+{"device":"device","timestamp":1715000120,"value":97.21}
+...
+```
+
+`--walk-bias` adds a constant drift per step (negative = downward trend). `--walk-min` / `--walk-max` clamp the value; clamping is disabled when both are `0`.
+
+### Cosine
+
+Oscillates between `--min` and `--max` over the given `--period`.
+
+```
+$ docker run ghcr.io/lucj/genx -type cos -duration 2d -min 20 -max 30 -step 3h -period 1d
+{"device":"device","timestamp":1715000000,"value":30.00}
+{"device":"device","timestamp":1715010800,"value":27.50}
+{"device":"device","timestamp":1715021600,"value":22.50}
+{"device":"device","timestamp":1715032400,"value":20.00}
+...
+```
 
 ### Logarithmic
 
@@ -72,21 +83,6 @@ $ docker run ghcr.io/lucj/genx -type exp -duration 6h -step 30m
 {"device":"device","timestamp":1715003600,"value":1.15}
 ...
 ```
-
-### Random walk
-
-Drifts by a random delta each sample — useful for simulating battery drain, temperature drift, or stock prices.
-
-```
-$ genx --type walk --walk-start 100 --walk-step 2 --walk-bias -0.1 \
-       --walk-min 0 --walk-max 120 --duration 1h --step 1m
-{"device":"device","timestamp":1715000000,"value":100.00}
-{"device":"device","timestamp":1715000060,"value":98.73}
-{"device":"device","timestamp":1715000120,"value":97.21}
-...
-```
-
-`--walk-bias` adds a constant drift per step (negative = downward trend). `--walk-min` / `--walk-max` clamp the value; clamping is disabled when both are `0`.
 
 ## Fleet mode
 
