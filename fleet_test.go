@@ -101,6 +101,79 @@ func TestRunRealtimeCancellation(t *testing.T) {
 	}
 }
 
+func TestRunRealtimeMultiEmitsPoints(t *testing.T) {
+	sink := &captureSink{}
+	fieldFns := map[string]func(float64) float64{
+		"temperature": func(x float64) float64 { return 22.0 },
+		"humidity":    func(x float64) float64 { return 60.0 },
+	}
+	scales := []float64{1.0, 1.0}
+	devices := []string{"sensor-0", "sensor-1"}
+
+	runRealtimeMulti(context.Background(), fieldFns, scales, 0, sink, devices, 2, 1)
+
+	if len(sink.points) != 4 {
+		t.Fatalf("expected 4 points (2 devices × 2 steps), got %d", len(sink.points))
+	}
+	for _, dp := range sink.points {
+		if dp.Fields == nil {
+			t.Fatalf("expected Fields to be populated, got nil for device %s", dp.Device)
+		}
+		if dp.Fields["temperature"] != 22.0 {
+			t.Errorf("expected temperature 22.0, got %v", dp.Fields["temperature"])
+		}
+		if dp.Fields["humidity"] != 60.0 {
+			t.Errorf("expected humidity 60.0, got %v", dp.Fields["humidity"])
+		}
+	}
+}
+
+func TestRunRealtimeMultiCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	sink := &captureSink{}
+	fieldFns := map[string]func(float64) float64{
+		"temperature": func(x float64) float64 { return 22.0 },
+	}
+	runRealtimeMulti(ctx, fieldFns, []float64{1.0}, 0, sink, []string{"sensor-0"}, 100, 10)
+
+	if len(sink.points) != 0 {
+		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
+	}
+}
+
+func TestEvalFields(t *testing.T) {
+	fieldFns := map[string]func(float64) float64{
+		"temp":  func(x float64) float64 { return 20.0 },
+		"humid": func(x float64) float64 { return 50.0 },
+	}
+
+	fields := evalFields(fieldFns, 1.0, 0, 0)
+	if fields["temp"] != 20.0 {
+		t.Errorf("expected temp=20.0, got %v", fields["temp"])
+	}
+	if fields["humid"] != 50.0 {
+		t.Errorf("expected humid=50.0, got %v", fields["humid"])
+	}
+
+	// Scale applies multiplicatively.
+	fields = evalFields(fieldFns, 2.0, 0, 0)
+	if fields["temp"] != 40.0 {
+		t.Errorf("expected temp=40.0 with scale=2, got %v", fields["temp"])
+	}
+
+	// Noise causes values to deviate from the deterministic result.
+	seen := map[float64]bool{}
+	for i := 0; i < 20; i++ {
+		f := evalFields(fieldFns, 1.0, 0.1, 0)
+		seen[f["temp"]] = true
+	}
+	if len(seen) == 1 {
+		t.Error("noise should produce varying values, but all were identical")
+	}
+}
+
 // Verify that values from different devices differ when spread > 0.
 func TestSpreadProducesDifferentValues(t *testing.T) {
 	sink := &captureSink{}
