@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand/v2"
+)
 
 // FieldConfig defines the curve for one field in a multi-field payload.
 type FieldConfig struct {
@@ -17,8 +20,8 @@ type FieldConfig struct {
 }
 
 // buildFieldFn constructs a curve function from a FieldConfig.
-// durationSeconds is used as the default period for cos and as the time range for linear/exp.
-func buildFieldFn(fc FieldConfig, start int64, durationSeconds int) (func(float64) float64, error) {
+// rng is only consumed when fc.Type is "walk".
+func buildFieldFn(rng *rand.Rand, fc FieldConfig, start int64, durationSeconds int) (func(float64) float64, error) {
 	switch fc.Type {
 	case "linear":
 		first := 0.0
@@ -53,9 +56,9 @@ func buildFieldFn(fc FieldConfig, start int64, durationSeconds int) (func(float6
 	case "exp":
 		return GetExp(start, durationSeconds), nil
 	case "walk":
-		start := 100.0
+		walkStart := 100.0
 		if fc.WalkStart != nil {
-			start = *fc.WalkStart
+			walkStart = *fc.WalkStart
 		}
 		step := 1.0
 		if fc.WalkStep != nil {
@@ -72,7 +75,7 @@ func buildFieldFn(fc FieldConfig, start int64, durationSeconds int) (func(float6
 		if fc.Max != nil {
 			wmax = *fc.Max
 		}
-		return GetRandomWalk(start, step, bias, wmin, wmax), nil
+		return GetRandomWalk(rng, walkStart, step, bias, wmin, wmax), nil
 	default:
 		return nil, fmt.Errorf("unknown type %q (use cos, linear, log, exp, walk)", fc.Type)
 	}

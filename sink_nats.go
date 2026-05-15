@@ -6,9 +6,10 @@ import "github.com/nats-io/nats.go"
 type NatsSink struct {
 	nc      *nats.Conn
 	subject string
+	render  Renderer
 }
 
-func NewNatsSink(url, subject, user, password, token string) (*NatsSink, error) {
+func NewNatsSink(url, subject, user, password, token string, render Renderer) (*NatsSink, error) {
 	opts := []nats.Option{}
 	switch {
 	case user != "":
@@ -20,20 +21,18 @@ func NewNatsSink(url, subject, user, password, token string) (*NatsSink, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &NatsSink{nc: nc, subject: subject}, nil
+	return &NatsSink{nc: nc, subject: subject, render: render}, nil
 }
 
 func (s *NatsSink) Send(dp DataPoint) error {
-	b, err := renderPayload(dp)
+	b, err := s.render(dp)
 	if err != nil {
 		return err
 	}
 	return s.nc.Publish(s.subject, b)
 }
 
+// Close drains the connection, which flushes pending messages before disconnecting.
 func (s *NatsSink) Close() error {
-	if err := s.nc.Flush(); err != nil {
-		return err
-	}
 	return s.nc.Drain()
 }

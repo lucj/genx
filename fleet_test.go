@@ -110,7 +110,7 @@ func TestRunRealtimeMultiEmitsPoints(t *testing.T) {
 	scales := []float64{1.0, 1.0}
 	devices := []string{"sensor-0", "sensor-1"}
 
-	runRealtimeMulti(context.Background(), fieldFns, scales, 0, sink, devices, 2, 1)
+	runRealtimeMulti(context.Background(), newRand(), fieldFns, scales, 0, sink, devices, 2, 1)
 
 	if len(sink.points) != 4 {
 		t.Fatalf("expected 4 points (2 devices × 2 steps), got %d", len(sink.points))
@@ -136,7 +136,7 @@ func TestRunRealtimeMultiCancellation(t *testing.T) {
 	fieldFns := map[string]func(float64) float64{
 		"temperature": func(x float64) float64 { return 22.0 },
 	}
-	runRealtimeMulti(ctx, fieldFns, []float64{1.0}, 0, sink, []string{"sensor-0"}, 100, 10)
+	runRealtimeMulti(ctx, newRand(), fieldFns, []float64{1.0}, 0, sink, []string{"sensor-0"}, 100, 10)
 
 	if len(sink.points) != 0 {
 		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
@@ -149,7 +149,7 @@ func TestEvalFields(t *testing.T) {
 		"humid": func(x float64) float64 { return 50.0 },
 	}
 
-	fields := evalFields(fieldFns, 1.0, 0, 0)
+	fields := evalFields(newRand(), fieldFns, 1.0, 0, 0)
 	if fields["temp"] != 20.0 {
 		t.Errorf("expected temp=20.0, got %v", fields["temp"])
 	}
@@ -158,7 +158,7 @@ func TestEvalFields(t *testing.T) {
 	}
 
 	// Scale applies multiplicatively.
-	fields = evalFields(fieldFns, 2.0, 0, 0)
+	fields = evalFields(newRand(), fieldFns, 2.0, 0, 0)
 	if fields["temp"] != 40.0 {
 		t.Errorf("expected temp=40.0 with scale=2, got %v", fields["temp"])
 	}
@@ -166,7 +166,7 @@ func TestEvalFields(t *testing.T) {
 	// Noise causes values to deviate from the deterministic result.
 	seen := map[float64]bool{}
 	for i := 0; i < 20; i++ {
-		f := evalFields(fieldFns, 1.0, 0.1, 0)
+		f := evalFields(newRand(), fieldFns, 1.0, 0.1, 0)
 		seen[f["temp"]] = true
 	}
 	if len(seen) == 1 {

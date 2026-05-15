@@ -12,9 +12,10 @@ type MqttSink struct {
 	client mqtt.Client
 	topic  string
 	qos    byte
+	render Renderer
 }
 
-func NewMqttSink(broker, topic, clientID string, qos int, user, password string) (*MqttSink, error) {
+func NewMqttSink(broker, topic, clientID string, qos int, user, password string, render Renderer) (*MqttSink, error) {
 	opts := mqtt.NewClientOptions().
 		AddBroker(broker).
 		SetClientID(clientID).
@@ -32,16 +33,18 @@ func NewMqttSink(broker, topic, clientID string, qos int, user, password string)
 	if err := token.Error(); err != nil {
 		return nil, err
 	}
-	return &MqttSink{client: client, topic: topic, qos: byte(qos)}, nil
+	return &MqttSink{client: client, topic: topic, qos: byte(qos), render: render}, nil
 }
 
 func (s *MqttSink) Send(dp DataPoint) error {
-	b, err := renderPayload(dp)
+	b, err := s.render(dp)
 	if err != nil {
 		return err
 	}
 	token := s.client.Publish(s.topic, s.qos, false, b)
-	token.Wait()
+	if !token.WaitTimeout(10 * time.Second) {
+		return fmt.Errorf("MQTT publish timed out")
+	}
 	return token.Error()
 }
 

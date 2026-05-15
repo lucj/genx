@@ -3,19 +3,14 @@ package main
 import (
 	"encoding/json"
 	"testing"
+	"text/template"
 )
 
-func resetTemplate(t *testing.T) {
-	t.Helper()
-	t.Cleanup(func() { payloadTmpl = nil })
-}
+func ptrF(v float64) *float64 { return &v }
 
-func ptr(v float64) *float64 { return &v }
-
-func TestRenderPayload_NoTemplate(t *testing.T) {
-	resetTemplate(t)
-	dp := DataPoint{Device: "dev1", Timestamp: 1000, Value: ptr(42.0)}
-	b, err := renderPayload(dp)
+func TestJSONRenderer(t *testing.T) {
+	dp := DataPoint{Device: "dev1", Timestamp: 1000, Value: ptrF(42.0)}
+	b, err := JSONRenderer(dp)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -28,16 +23,14 @@ func TestRenderPayload_NoTemplate(t *testing.T) {
 	}
 }
 
-func TestRenderPayload_Template(t *testing.T) {
-	resetTemplate(t)
-	tmpl := `{"sensor":"{{.Device}}","ts":{{.Timestamp}},"val":{{.Value}}}`
-	if err := initTemplate(tmpl); err != nil {
-		t.Fatalf("initTemplate: %v", err)
-	}
-	dp := DataPoint{Device: "sensor-a", Timestamp: 9999, Value: ptr(7.5)}
-	b, err := renderPayload(dp)
+func TestTemplateRenderer(t *testing.T) {
+	tmpl := template.Must(template.New("p").Parse(`{"sensor":"{{.Device}}","ts":{{.Timestamp}},"val":{{.Value}}}`))
+	render := NewTemplateRenderer(tmpl)
+
+	dp := DataPoint{Device: "sensor-a", Timestamp: 9999, Value: ptrF(7.5)}
+	b, err := render(dp)
 	if err != nil {
-		t.Fatalf("renderPayload: %v", err)
+		t.Fatalf("render error: %v", err)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
@@ -51,20 +44,18 @@ func TestRenderPayload_Template(t *testing.T) {
 	}
 }
 
-func TestRenderPayload_TemplateWithFields(t *testing.T) {
-	resetTemplate(t)
-	tmpl := `{"device":"{{.Device}}","temp":{{.Fields.temperature}}}`
-	if err := initTemplate(tmpl); err != nil {
-		t.Fatalf("initTemplate: %v", err)
-	}
+func TestTemplateRendererWithFields(t *testing.T) {
+	tmpl := template.Must(template.New("p").Parse(`{"device":"{{.Device}}","temp":{{.Fields.temperature}}}`))
+	render := NewTemplateRenderer(tmpl)
+
 	dp := DataPoint{
 		Device:    "room1",
 		Timestamp: 5000,
 		Fields:    map[string]float64{"temperature": 21.3},
 	}
-	b, err := renderPayload(dp)
+	b, err := render(dp)
 	if err != nil {
-		t.Fatalf("renderPayload: %v", err)
+		t.Fatalf("render error: %v", err)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
@@ -75,37 +66,24 @@ func TestRenderPayload_TemplateWithFields(t *testing.T) {
 	}
 }
 
-func TestInitTemplate_InvalidSyntax(t *testing.T) {
-	resetTemplate(t)
-	err := initTemplate(`{"bad": {{.Missing}`)
-	if err == nil {
-		t.Fatal("expected parse error for invalid template syntax")
-	}
-}
-
-func TestRenderPayload_NonJSONTemplate(t *testing.T) {
-	resetTemplate(t)
-	if err := initTemplate(`not json at all {{.Device}}`); err != nil {
-		t.Fatalf("initTemplate: %v", err)
-	}
+func TestTemplateRendererNonJSON(t *testing.T) {
+	tmpl := template.Must(template.New("p").Parse(`not json at all {{.Device}}`))
+	render := NewTemplateRenderer(tmpl)
 	dp := DataPoint{Device: "x", Timestamp: 1}
-	_, err := renderPayload(dp)
-	if err == nil {
+	if _, err := render(dp); err == nil {
 		t.Fatal("expected error for non-JSON template output")
 	}
 }
 
-func TestRenderPayload_NilValue(t *testing.T) {
-	resetTemplate(t)
-	tmpl := `{"device":"{{.Device}}","val":{{.Value}}}`
-	if err := initTemplate(tmpl); err != nil {
-		t.Fatalf("initTemplate: %v", err)
-	}
+func TestTemplateRendererNilValue(t *testing.T) {
+	tmpl := template.Must(template.New("p").Parse(`{"device":"{{.Device}}","val":{{.Value}}}`))
+	render := NewTemplateRenderer(tmpl)
+
 	// Value is nil — template should see 0.0, not <nil>
 	dp := DataPoint{Device: "dev", Timestamp: 1, Value: nil}
-	b, err := renderPayload(dp)
+	b, err := render(dp)
 	if err != nil {
-		t.Fatalf("renderPayload: %v", err)
+		t.Fatalf("render error: %v", err)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {

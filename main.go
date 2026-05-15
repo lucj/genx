@@ -7,17 +7,54 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
+	"text/template"
 	"time"
 )
+
+// sinkConfig carries the resolved parameters needed to construct a Sink.
+type sinkConfig struct {
+	output       string
+	webhookURL   string
+	webhookToken string
+	natsURL      string
+	natsSubject  string
+	natsUser     string
+	natsPassword string
+	natsToken    string
+	mqttBroker   string
+	mqttTopic    string
+	mqttClientID string
+	mqttQoS      int
+	mqttUser     string
+	mqttPassword string
+	renderer     Renderer
+}
+
+func buildSink(cfg sinkConfig) (Sink, error) {
+	switch cfg.output {
+	case "stdout":
+		return NewStdoutSink(cfg.renderer), nil
+	case "webhook":
+		if cfg.webhookURL == "" {
+			return nil, fmt.Errorf("--webhook-url is required when --output is webhook")
+		}
+		return NewWebhookSink(cfg.webhookURL, cfg.webhookToken, cfg.renderer), nil
+	case "nats":
+		return NewNatsSink(cfg.natsURL, cfg.natsSubject, cfg.natsUser, cfg.natsPassword, cfg.natsToken, cfg.renderer)
+	case "mqtt":
+		return NewMqttSink(cfg.mqttBroker, cfg.mqttTopic, cfg.mqttClientID, cfg.mqttQoS, cfg.mqttUser, cfg.mqttPassword, cfg.renderer)
+	default:
+		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt)", cfg.output)
+	}
+}
 
 func main() {
 	// Config file flag
 	configPtr := flag.String("config", "", "path to YAML config file (CLI flags take precedence)")
 
 	// Curve flags
-	typePtr := flag.String("type", "cos", "type of curve: cos, linear, log, exp")
+	typePtr := flag.String("type", "cos", "type of curve: cos, linear, log, exp, walk")
 	durationPtr := flag.String("duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
 	stepPtr := flag.String("step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
 	devicePtr := flag.String("device", "device", "device/sensor name (or prefix when --devices > 1)")
@@ -34,7 +71,7 @@ func main() {
 	linearFirst := flag.Float64("first", 0, "first value (linear)")
 	linearLast := flag.Float64("last", 1, "last value (linear)")
 
-	// Cosinus curve flags
+	// Cosine curve flags
 	cosMin := flag.Float64("min", 10, "minimum value (cos)")
 	cosMax := flag.Float64("max", 25, "maximum value (cos)")
 	cosPeriod := flag.String("period", "1d", "period (cos), e.g. 1d, 12h")
@@ -69,7 +106,7 @@ func main() {
 	mqttPassword := flag.String("mqtt-password", "", "MQTT password")
 
 	// Payload template flags
-	payloadTemplate := flag.String("payload-template", "", "Go text/template string for JSON payload")
+	payloadTemplateStr := flag.String("payload-template", "", "Go text/template string for JSON payload")
 	payloadTemplateFile := flag.String("payload-template-file", "", "path to a Go text/template file for JSON payload")
 
 	flag.Parse()
@@ -85,89 +122,92 @@ func main() {
 		set := map[string]bool{}
 		flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
 
-		if cfg.Type != "" && !set["type"]                       { *typePtr = cfg.Type }
-		if cfg.Duration != "" && !set["duration"]               { *durationPtr = cfg.Duration }
-		if cfg.Step != "" && !set["step"]                       { *stepPtr = cfg.Step }
-		if cfg.Device != "" && !set["device"]                   { *devicePtr = cfg.Device }
-		if cfg.Devices != nil && !set["devices"]                { *devicesPtr = *cfg.Devices }
-		if cfg.Spread != nil && !set["spread"]                  { *spreadPtr = *cfg.Spread }
-		if cfg.Noise != nil && !set["noise"]                    { *noisePtr = *cfg.Noise }
-		if cfg.Realtime != nil && !set["realtime"]              { *realtimePtr = *cfg.Realtime }
-		if cfg.Seed != nil && !set["seed"]                      { *seedPtr = *cfg.Seed }
-		if cfg.ReplayFile != "" && !set["replay-file"]          { *replayFilePtr = cfg.ReplayFile }
+		if cfg.Type != "" && !set["type"]                      { *typePtr = cfg.Type }
+		if cfg.Duration != "" && !set["duration"]              { *durationPtr = cfg.Duration }
+		if cfg.Step != "" && !set["step"]                      { *stepPtr = cfg.Step }
+		if cfg.Device != "" && !set["device"]                  { *devicePtr = cfg.Device }
+		if cfg.Devices != nil && !set["devices"]               { *devicesPtr = *cfg.Devices }
+		if cfg.Spread != nil && !set["spread"]                 { *spreadPtr = *cfg.Spread }
+		if cfg.Noise != nil && !set["noise"]                   { *noisePtr = *cfg.Noise }
+		if cfg.Realtime != nil && !set["realtime"]             { *realtimePtr = *cfg.Realtime }
+		if cfg.Seed != nil && !set["seed"]                     { *seedPtr = *cfg.Seed }
+		if cfg.ReplayFile != "" && !set["replay-file"]         { *replayFilePtr = cfg.ReplayFile }
 
-		if cfg.First != nil && !set["first"]                    { *linearFirst = *cfg.First }
-		if cfg.Last != nil && !set["last"]                      { *linearLast = *cfg.Last }
-		if cfg.Min != nil && !set["min"]                        { *cosMin = *cfg.Min }
-		if cfg.Max != nil && !set["max"]                        { *cosMax = *cfg.Max }
-		if cfg.Period != "" && !set["period"]                   { *cosPeriod = cfg.Period }
-		if cfg.WalkStart != nil && !set["walk-start"]           { *walkStart = *cfg.WalkStart }
-		if cfg.WalkStep != nil && !set["walk-step"]             { *walkStep = *cfg.WalkStep }
-		if cfg.WalkBias != nil && !set["walk-bias"]             { *walkBias = *cfg.WalkBias }
-		if cfg.WalkMin != nil && !set["walk-min"]               { *walkMin = *cfg.WalkMin }
-		if cfg.WalkMax != nil && !set["walk-max"]               { *walkMax = *cfg.WalkMax }
+		if cfg.First != nil && !set["first"]                   { *linearFirst = *cfg.First }
+		if cfg.Last != nil && !set["last"]                     { *linearLast = *cfg.Last }
+		if cfg.Min != nil && !set["min"]                       { *cosMin = *cfg.Min }
+		if cfg.Max != nil && !set["max"]                       { *cosMax = *cfg.Max }
+		if cfg.Period != "" && !set["period"]                  { *cosPeriod = cfg.Period }
+		if cfg.WalkStart != nil && !set["walk-start"]          { *walkStart = *cfg.WalkStart }
+		if cfg.WalkStep != nil && !set["walk-step"]            { *walkStep = *cfg.WalkStep }
+		if cfg.WalkBias != nil && !set["walk-bias"]            { *walkBias = *cfg.WalkBias }
+		if cfg.WalkMin != nil && !set["walk-min"]              { *walkMin = *cfg.WalkMin }
+		if cfg.WalkMax != nil && !set["walk-max"]              { *walkMax = *cfg.WalkMax }
 
-		if cfg.Output != "" && !set["output"]                   { *outputPtr = cfg.Output }
-		if cfg.WebhookURL != "" && !set["webhook-url"]          { *webhookURL = cfg.WebhookURL }
-		if cfg.WebhookToken != "" && !set["webhook-token"]      { *webhookToken = cfg.WebhookToken }
-		if cfg.NatsURL != "" && !set["nats-url"]                { *natsURL = cfg.NatsURL }
-		if cfg.NatsSubject != "" && !set["nats-subject"]        { *natsSubject = cfg.NatsSubject }
-		if cfg.NatsUser != "" && !set["nats-user"]              { *natsUser = cfg.NatsUser }
-		if cfg.NatsPassword != "" && !set["nats-password"]      { *natsPassword = cfg.NatsPassword }
-		if cfg.NatsToken != "" && !set["nats-token"]            { *natsToken = cfg.NatsToken }
-		if cfg.MqttBroker != "" && !set["mqtt-broker"]          { *mqttBroker = cfg.MqttBroker }
-		if cfg.MqttTopic != "" && !set["mqtt-topic"]            { *mqttTopic = cfg.MqttTopic }
-		if cfg.MqttQoS != nil && !set["mqtt-qos"]               { *mqttQoS = *cfg.MqttQoS }
-		if cfg.MqttClientID != "" && !set["mqtt-client-id"]     { *mqttClientID = cfg.MqttClientID }
-		if cfg.MqttUser != "" && !set["mqtt-user"]              { *mqttUser = cfg.MqttUser }
-		if cfg.MqttPassword != "" && !set["mqtt-password"]      { *mqttPassword = cfg.MqttPassword }
-		if cfg.PayloadTemplate != "" && !set["payload-template"]           { *payloadTemplate = cfg.PayloadTemplate }
-		if cfg.PayloadTemplateFile != "" && !set["payload-template-file"]  { *payloadTemplateFile = cfg.PayloadTemplateFile }
+		if cfg.Output != "" && !set["output"]                  { *outputPtr = cfg.Output }
+		if cfg.WebhookURL != "" && !set["webhook-url"]         { *webhookURL = cfg.WebhookURL }
+		if cfg.WebhookToken != "" && !set["webhook-token"]     { *webhookToken = cfg.WebhookToken }
+		if cfg.NatsURL != "" && !set["nats-url"]               { *natsURL = cfg.NatsURL }
+		if cfg.NatsSubject != "" && !set["nats-subject"]       { *natsSubject = cfg.NatsSubject }
+		if cfg.NatsUser != "" && !set["nats-user"]             { *natsUser = cfg.NatsUser }
+		if cfg.NatsPassword != "" && !set["nats-password"]     { *natsPassword = cfg.NatsPassword }
+		if cfg.NatsToken != "" && !set["nats-token"]           { *natsToken = cfg.NatsToken }
+		if cfg.MqttBroker != "" && !set["mqtt-broker"]         { *mqttBroker = cfg.MqttBroker }
+		if cfg.MqttTopic != "" && !set["mqtt-topic"]           { *mqttTopic = cfg.MqttTopic }
+		if cfg.MqttQoS != nil && !set["mqtt-qos"]              { *mqttQoS = *cfg.MqttQoS }
+		if cfg.MqttClientID != "" && !set["mqtt-client-id"]    { *mqttClientID = cfg.MqttClientID }
+		if cfg.MqttUser != "" && !set["mqtt-user"]             { *mqttUser = cfg.MqttUser }
+		if cfg.MqttPassword != "" && !set["mqtt-password"]     { *mqttPassword = cfg.MqttPassword }
+		if cfg.PayloadTemplate != "" && !set["payload-template"]          { *payloadTemplateStr = cfg.PayloadTemplate }
+		if cfg.PayloadTemplateFile != "" && !set["payload-template-file"] { *payloadTemplateFile = cfg.PayloadTemplateFile }
 	}
 
-	// Initialize payload template (file takes precedence over inline string).
+	// Build the renderer (file takes precedence over inline string).
+	renderer := Renderer(JSONRenderer)
 	if *payloadTemplateFile != "" {
 		raw, err := os.ReadFile(*payloadTemplateFile)
 		if err != nil {
 			log.Fatalf("cannot read payload-template-file: %v", err)
 		}
-		if err := initTemplate(string(raw)); err != nil {
+		tmpl, err := template.New("payload").Parse(string(raw))
+		if err != nil {
 			log.Fatalf("invalid payload template: %v", err)
 		}
-	} else if *payloadTemplate != "" {
-		if err := initTemplate(*payloadTemplate); err != nil {
+		renderer = NewTemplateRenderer(tmpl)
+	} else if *payloadTemplateStr != "" {
+		tmpl, err := template.New("payload").Parse(*payloadTemplateStr)
+		if err != nil {
 			log.Fatalf("invalid payload template: %v", err)
 		}
+		renderer = NewTemplateRenderer(tmpl)
 	}
 
-	// Reseed before any random values are consumed.
+	// Initialise RNG (seeded before any random values are consumed).
+	rng := newRand()
 	if *seedPtr != 0 {
-		initRand(uint64(*seedPtr))
+		rng = seededRand(uint64(*seedPtr))
 	}
 
 	// Build the output sink.
-	var err error
-	var sink Sink
-	switch *outputPtr {
-	case "stdout":
-		sink = NewStdoutSink()
-	case "webhook":
-		if *webhookURL == "" {
-			log.Fatal("--webhook-url is required when --output is webhook")
-		}
-		sink = NewWebhookSink(*webhookURL, *webhookToken)
-	case "nats":
-		sink, err = NewNatsSink(*natsURL, *natsSubject, *natsUser, *natsPassword, *natsToken)
-		if err != nil {
-			log.Fatalf("NATS connection failed: %v", err)
-		}
-	case "mqtt":
-		sink, err = NewMqttSink(*mqttBroker, *mqttTopic, *mqttClientID, *mqttQoS, *mqttUser, *mqttPassword)
-		if err != nil {
-			log.Fatalf("MQTT connection failed: %v", err)
-		}
-	default:
-		log.Fatalf("unknown output %q (use stdout, webhook, nats, mqtt)", *outputPtr)
+	sink, err := buildSink(sinkConfig{
+		output:       *outputPtr,
+		webhookURL:   *webhookURL,
+		webhookToken: *webhookToken,
+		natsURL:      *natsURL,
+		natsSubject:  *natsSubject,
+		natsUser:     *natsUser,
+		natsPassword: *natsPassword,
+		natsToken:    *natsToken,
+		mqttBroker:   *mqttBroker,
+		mqttTopic:    *mqttTopic,
+		mqttClientID: *mqttClientID,
+		mqttQoS:      *mqttQoS,
+		mqttUser:     *mqttUser,
+		mqttPassword: *mqttPassword,
+		renderer:     renderer,
+	})
+	if err != nil {
+		log.Fatalf("sink: %v", err)
 	}
 	defer func() {
 		if err := sink.Close(); err != nil {
@@ -184,7 +224,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("invalid --step: %v", err)
 		}
-		runReplay(ctx, *replayFilePtr, sink, *realtimePtr, stepSeconds)
+		if err := runReplay(ctx, *replayFilePtr, sink, *realtimePtr, stepSeconds); err != nil {
+			log.Fatalf("%v", err)
+		}
 		return
 	}
 
@@ -220,7 +262,7 @@ func main() {
 	if cfg != nil && len(cfg.Fields) > 0 {
 		fieldFns := make(map[string]func(float64) float64, len(cfg.Fields))
 		for name, fc := range cfg.Fields {
-			fn, err := buildFieldFn(fc, start, durationSeconds)
+			fn, err := buildFieldFn(rng, fc, start, durationSeconds)
 			if err != nil {
 				log.Fatalf("field %q: %v", name, err)
 			}
@@ -234,9 +276,9 @@ func main() {
 			}
 		}
 		if *realtimePtr {
-			runRealtimeMulti(ctx, fieldFns, scales, *noisePtr, sink, devices, itemCount, stepSeconds)
+			runRealtimeMulti(ctx, rng, fieldFns, scales, *noisePtr, sink, devices, itemCount, stepSeconds)
 		} else {
-			runBatchMulti(fieldFns, scales, *noisePtr, sink, devices, start, itemCount, stepSeconds)
+			runBatchMulti(rng, fieldFns, scales, *noisePtr, sink, devices, start, itemCount, stepSeconds)
 		}
 		return
 	}
@@ -248,8 +290,7 @@ func main() {
 	case "linear":
 		baseFn = GetLinear(*linearFirst, *linearLast, start, durationSeconds)
 	case "cos":
-		var periodSeconds int
-		periodSeconds, err = GetSeconds(*cosPeriod)
+		periodSeconds, err := GetSeconds(*cosPeriod)
 		if err != nil {
 			log.Fatalf("invalid --period: %v", err)
 		}
@@ -272,11 +313,11 @@ func main() {
 		}
 		if *typePtr == "walk" {
 			// Spread varies the starting value so devices begin at different levels.
-			fns[i] = WithNoise(GetRandomWalk(*walkStart*scale, *walkStep, *walkBias, *walkMin, *walkMax), *noisePtr)
+			fns[i] = WithNoise(rng, GetRandomWalk(rng, *walkStart*scale, *walkStep, *walkBias, *walkMin, *walkMax), *noisePtr)
 		} else {
 			fn := baseFn
 			s := scale
-			fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
+			fns[i] = WithNoise(rng, func(x float64) float64 { return fn(x) * s }, *noisePtr)
 		}
 	}
 	if *realtimePtr {
@@ -284,108 +325,4 @@ func main() {
 	} else {
 		runBatch(fns, sink, devices, start, itemCount, stepSeconds)
 	}
-}
-
-// runBatch generates all data points immediately for each device, spacing timestamps by stepSeconds.
-func runBatch(fns []func(float64) float64, sink Sink, devices []string, start int64, count, stepSeconds int) {
-	for d, device := range devices {
-		for i := 0; i < count; i++ {
-			ts := start + int64(i*stepSeconds)
-			v := fns[d](float64(ts))
-			dp := DataPoint{Device: device, Timestamp: ts, Value: &v}
-			if err := sink.Send(dp); err != nil {
-				log.Printf("send error: %v", err)
-			}
-		}
-	}
-}
-
-// runRealtime emits one data point per step interval for each device concurrently.
-func runRealtime(ctx context.Context, fns []func(float64) float64, sink Sink, devices []string, count, stepSeconds int) {
-	var wg sync.WaitGroup
-	for d, device := range devices {
-		wg.Add(1)
-		go func(device string, fn func(float64) float64) {
-			defer wg.Done()
-			ticker := time.NewTicker(time.Duration(stepSeconds) * time.Second)
-			defer ticker.Stop()
-			sent := 0
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-				}
-				ts := time.Now().Unix()
-				v := fn(float64(ts))
-				dp := DataPoint{Device: device, Timestamp: ts, Value: &v}
-				if err := sink.Send(dp); err != nil {
-					log.Printf("send error: %v", err)
-				}
-				sent++
-				if sent >= count {
-					return
-				}
-			}
-		}(device, fns[d])
-	}
-	wg.Wait()
-}
-
-// runBatchMulti generates multi-field data points for each device sequentially.
-func runBatchMulti(fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, start int64, count, stepSeconds int) {
-	for d, device := range devices {
-		scale := scales[d]
-		for i := 0; i < count; i++ {
-			ts := start + int64(i*stepSeconds)
-			dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(fieldFns, scale, noise, float64(ts))}
-			if err := sink.Send(dp); err != nil {
-				log.Printf("send error: %v", err)
-			}
-		}
-	}
-}
-
-// runRealtimeMulti emits multi-field data points per step interval for each device concurrently.
-func runRealtimeMulti(ctx context.Context, fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, count, stepSeconds int) {
-	var wg sync.WaitGroup
-	for d, device := range devices {
-		wg.Add(1)
-		go func(device string, scale float64) {
-			defer wg.Done()
-			ticker := time.NewTicker(time.Duration(stepSeconds) * time.Second)
-			defer ticker.Stop()
-			sent := 0
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-				}
-				ts := time.Now().Unix()
-				dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(fieldFns, scale, noise, float64(ts))}
-				if err := sink.Send(dp); err != nil {
-					log.Printf("send error: %v", err)
-				}
-				sent++
-				if sent >= count {
-					return
-				}
-			}
-		}(device, scales[d])
-	}
-	wg.Wait()
-}
-
-// evalFields evaluates all field functions at timestamp x, applying scale and noise.
-func evalFields(fieldFns map[string]func(float64) float64, scale, noise, x float64) map[string]float64 {
-	fields := make(map[string]float64, len(fieldFns))
-	for name, fn := range fieldFns {
-		v := fn(x) * scale
-		if noise > 0 {
-			v *= 1 + noise*(2*rng.Float64()-1)
-		}
-		fields[name] = v
-	}
-	return fields
 }

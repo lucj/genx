@@ -10,7 +10,7 @@ func TestBuildFieldFnLinear(t *testing.T) {
 	first, last := 0.0, 100.0
 	fc := FieldConfig{Type: "linear", First: &first, Last: &last}
 	start := time.Now().Unix()
-	fn, err := buildFieldFn(fc, start, 3600)
+	fn, err := buildFieldFn(newRand(), fc, start, 3600)
 	if err != nil {
 		t.Fatalf("buildFieldFn error: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestBuildFieldFnCos(t *testing.T) {
 	min, max := 10.0, 25.0
 	fc := FieldConfig{Type: "cos", Min: &min, Max: &max}
 	start := time.Now().Unix()
-	fn, err := buildFieldFn(fc, start, 86400)
+	fn, err := buildFieldFn(newRand(), fc, start, 86400)
 	if err != nil {
 		t.Fatalf("buildFieldFn error: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestBuildFieldFnCos(t *testing.T) {
 func TestBuildFieldFnLog(t *testing.T) {
 	fc := FieldConfig{Type: "log"}
 	start := time.Now().Unix()
-	_, err := buildFieldFn(fc, start, 3600)
+	_, err := buildFieldFn(newRand(), fc, start, 3600)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestBuildFieldFnLog(t *testing.T) {
 func TestBuildFieldFnExp(t *testing.T) {
 	fc := FieldConfig{Type: "exp"}
 	start := time.Now().Unix()
-	_, err := buildFieldFn(fc, start, 3600)
+	_, err := buildFieldFn(newRand(), fc, start, 3600)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -54,11 +54,10 @@ func TestBuildFieldFnExp(t *testing.T) {
 func TestBuildFieldFnWalk(t *testing.T) {
 	start := 100.0
 	fc := FieldConfig{Type: "walk", WalkStart: &start}
-	fn, err := buildFieldFn(fc, time.Now().Unix(), 3600)
+	fn, err := buildFieldFn(newRand(), fc, time.Now().Unix(), 3600)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Walk should produce a value close to start on the first call
 	v := fn(0)
 	if v < 90 || v > 110 {
 		t.Errorf("first walk value %f unexpectedly far from start 100", v)
@@ -67,7 +66,7 @@ func TestBuildFieldFnWalk(t *testing.T) {
 
 func TestBuildFieldFnUnknownType(t *testing.T) {
 	fc := FieldConfig{Type: "unknown"}
-	_, err := buildFieldFn(fc, time.Now().Unix(), 3600)
+	_, err := buildFieldFn(newRand(), fc, time.Now().Unix(), 3600)
 	if err == nil {
 		t.Error("expected error for unknown type, got nil")
 	}
@@ -76,7 +75,7 @@ func TestBuildFieldFnUnknownType(t *testing.T) {
 func TestBuildFieldFnInvalidPeriod(t *testing.T) {
 	min, max := 0.0, 1.0
 	fc := FieldConfig{Type: "cos", Min: &min, Max: &max, Period: "5x"}
-	_, err := buildFieldFn(fc, time.Now().Unix(), 3600)
+	_, err := buildFieldFn(newRand(), fc, time.Now().Unix(), 3600)
 	if err == nil {
 		t.Error("expected error for invalid period, got nil")
 	}
@@ -90,7 +89,7 @@ func TestRunBatchMultiFieldsPresent(t *testing.T) {
 	}
 	scales := []float64{1.0, 1.0}
 	devices := []string{"sensor-0", "sensor-1"}
-	runBatchMulti(fieldFns, scales, 0, sink, devices, time.Now().Unix(), 3, 60)
+	runBatchMulti(newRand(), fieldFns, scales, 0, sink, devices, time.Now().Unix(), 3, 60)
 
 	if len(sink.points) != 6 {
 		t.Fatalf("expected 6 points (2 devices × 3 steps), got %d", len(sink.points))
