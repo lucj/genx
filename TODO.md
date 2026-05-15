@@ -53,10 +53,11 @@ Real-time mode uses one goroutine per device; all sinks are concurrency-safe.
 
 ### ✅ cos · linear · log · exp
 
-### 🟡 Random walk
-Each value is `previous ± small random delta` (`--random-walk-step`).
-Classic for environmental drift, battery degradation, slow-moving metrics.
-Unlike the current curves, values are path-dependent — more authentic for long-running simulations.
+### ✅ Random walk (`--type walk`)
+Stateful closure that drifts by a random delta each sample. Path-dependent values
+make it more authentic than smooth curves for battery drain, temperature drift, etc.
+Flags: `--walk-start`, `--walk-step`, `--walk-bias`, `--walk-min`, `--walk-max`.
+Fleet mode: each device gets its own independent walk; spread varies the starting value.
 
 ### 🟢 Sawtooth / square wave
 Useful for simulating on/off equipment cycles (pumps, valves, HVAC units).
