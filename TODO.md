@@ -102,7 +102,7 @@ Would use `segmentio/kafka-go` to avoid CGO dependency.
 Flags always take precedence over config values.
 
 ### ✅ Authentication
-NATS (`--nats-user`, `--nats-password`), MQTT (`--mqtt-user`, `--mqtt-password`),
+NATS (`--nats-user`/`--nats-password` or `--nats-token`), MQTT (`--mqtt-user`, `--mqtt-password`),
 webhook (`--webhook-token`).
 
 ### 🔴 Graceful shutdown
