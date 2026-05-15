@@ -1,0 +1,42 @@
+services:
+
+  # NATS with user/password authentication
+  # Test with:
+  #   genx --output nats --nats-url nats://localhost:4222 \
+  #         --nats-user alice --nats-password secret \
+  #         --type cos --duration 1m --step 5s --realtime
+  nats-userpass:
+    image: nats:2.10-alpine
+    container_name: genx-nats-userpass
+    ports:
+      - "4222:4222"   # client connections
+      - "8222:8222"   # HTTP monitoring  →  http://localhost:8222
+    command: ["--user", "alice", "--pass", "secret", "--http_port", "8222"]
+
+  # NATS with token authentication
+  # Test with:
+  #   genx --output nats --nats-url nats://localhost:4223 \
+  #         --nats-token mysecrettoken \
+  #         --type cos --duration 1m --step 5s --realtime
+  nats-token:
+    image: nats:2.10-alpine
+    container_name: genx-nats-token
+    ports:
+      - "4223:4222"   # client connections
+      - "8223:8222"   # HTTP monitoring  →  http://localhost:8223
+    command: ["--auth", "mysecrettoken", "--http_port", "8222"]
+
+  # Optional subscriber — see messages arriving in real time
+  # Usage: docker compose run --rm nats-sub-userpass
+  nats-sub-userpass:
+    image: natsio/nats-box:latest
+    profiles: ["sub"]
+    depends_on: [nats-userpass]
+    entrypoint: ["nats", "sub", "--server", "nats://alice:secret@nats-userpass:4222", "genx"]
+
+  # Usage: docker compose run --rm nats-sub-token
+  nats-sub-token:
+    image: natsio/nats-box:latest
+    profiles: ["sub"]
+    depends_on: [nats-token]
+    entrypoint: ["nats", "sub", "--server", "nats://mysecrettoken@nats-token:4222", "genx"]
