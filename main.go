@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -168,13 +171,16 @@ func main() {
 	}
 	defer sink.Close()
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	// Replay mode: send a recorded JSON-lines file through the sink.
 	if *replayFilePtr != "" {
 		stepSeconds, err := GetSeconds(*stepPtr)
 		if err != nil {
 			log.Fatalf("invalid --step: %v", err)
 		}
-		runReplay(*replayFilePtr, sink, *realtimePtr, stepSeconds)
+		runReplay(ctx, *replayFilePtr, sink, *realtimePtr, stepSeconds)
 		return
 	}
 
@@ -224,7 +230,7 @@ func main() {
 			}
 		}
 		if *realtimePtr {
-			runRealtimeMulti(fieldFns, scales, *noisePtr, sink, devices, itemCount, stepSeconds)
+			runRealtimeMulti(ctx, fieldFns, scales, *noisePtr, sink, devices, itemCount, stepSeconds)
 		} else {
 			runBatchMulti(fieldFns, scales, *noisePtr, sink, devices, start, itemCount, stepSeconds)
 		}
@@ -271,7 +277,7 @@ func main() {
 	}
 
 	if *realtimePtr {
-		runRealtime(fns, sink, devices, itemCount, stepSeconds)
+		runRealtime(ctx, fns, sink, devices, itemCount, stepSeconds)
 	} else {
 		runBatch(fns, sink, devices, start, itemCount, stepSeconds)
 	}
@@ -292,7 +298,7 @@ func runBatch(fns []func(float64) float64, sink Sink, devices []string, start in
 }
 
 // runRealtime emits one data point per step interval for each device concurrently.
-func runRealtime(fns []func(float64) float64, sink Sink, devices []string, count, stepSeconds int) {
+func runRealtime(ctx context.Context, fns []func(float64) float64, sink Sink, devices []string, count, stepSeconds int) {
 	var wg sync.WaitGroup
 	for d, device := range devices {
 		wg.Add(1)
@@ -301,7 +307,12 @@ func runRealtime(fns []func(float64) float64, sink Sink, devices []string, count
 			ticker := time.NewTicker(time.Duration(stepSeconds) * time.Second)
 			defer ticker.Stop()
 			sent := 0
-			for range ticker.C {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
 				ts := time.Now().Unix()
 				v := fn(float64(ts))
 				dp := DataPoint{Device: device, Timestamp: ts, Value: &v}
@@ -333,7 +344,7 @@ func runBatchMulti(fieldFns map[string]func(float64) float64, scales []float64, 
 }
 
 // runRealtimeMulti emits multi-field data points per step interval for each device concurrently.
-func runRealtimeMulti(fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, count, stepSeconds int) {
+func runRealtimeMulti(ctx context.Context, fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, count, stepSeconds int) {
 	var wg sync.WaitGroup
 	for d, device := range devices {
 		wg.Add(1)
@@ -342,7 +353,12 @@ func runRealtimeMulti(fieldFns map[string]func(float64) float64, scales []float6
 			ticker := time.NewTicker(time.Duration(stepSeconds) * time.Second)
 			defer ticker.Stop()
 			sent := 0
-			for range ticker.C {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
 				ts := time.Now().Unix()
 				dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(fieldFns, scale, noise, float64(ts))}
 				if err := sink.Send(dp); err != nil {

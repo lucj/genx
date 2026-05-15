@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -66,7 +67,7 @@ func TestRunRealtimeFleet(t *testing.T) {
 		func(x float64) float64 { return 1.0 },
 		func(x float64) float64 { return 2.0 },
 	}
-	runRealtime(fns, sink, devices, 2, 1) // 2 points per device, 1 s step
+	runRealtime(context.Background(), fns, sink, devices, 2, 1) // 2 points per device, 1 s step
 
 	if len(sink.points) != 4 {
 		t.Fatalf("expected 4 points (2 devices × 2 steps), got %d", len(sink.points))
@@ -79,6 +80,24 @@ func TestRunRealtimeFleet(t *testing.T) {
 		if counts[dev] != 2 {
 			t.Errorf("device %q: expected 2 points, got %d", dev, counts[dev])
 		}
+	}
+}
+
+// Verify that cancelling the context stops realtime emission early.
+func TestRunRealtimeCancellation(t *testing.T) {
+	sink := &captureSink{}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	fns := []func(float64) float64{func(x float64) float64 { return 1.0 }}
+	devices := []string{"sensor-0"}
+
+	// Cancel before the first tick (step = 10 s, so the goroutine will block on the ticker).
+	cancel()
+	runRealtime(ctx, fns, sink, devices, 100, 10)
+
+	// No points should have been sent since the context was already cancelled.
+	if len(sink.points) != 0 {
+		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
 	}
 }
 
