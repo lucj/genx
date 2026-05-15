@@ -166,7 +166,11 @@ func main() {
 	default:
 		log.Fatalf("unknown output %q (use stdout, webhook, nats, mqtt)", *outputPtr)
 	}
-	defer sink.Close()
+	defer func() {
+		if err := sink.Close(); err != nil {
+			log.Printf("sink close error: %v", err)
+		}
+	}()
 
 	// Replay mode: send a recorded JSON-lines file through the sink.
 	if *replayFilePtr != "" {
@@ -269,7 +273,6 @@ func main() {
 			fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
 		}
 	}
-
 	if *realtimePtr {
 		runRealtime(fns, sink, devices, itemCount, stepSeconds)
 	} else {
