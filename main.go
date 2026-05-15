@@ -65,6 +65,10 @@ func main() {
 	mqttUser := flag.String("mqtt-user", "", "MQTT username")
 	mqttPassword := flag.String("mqtt-password", "", "MQTT password")
 
+	// Payload template flags
+	payloadTemplate := flag.String("payload-template", "", "Go text/template string for JSON payload")
+	payloadTemplateFile := flag.String("payload-template-file", "", "path to a Go text/template file for JSON payload")
+
 	flag.Parse()
 
 	// Load config and apply values for flags not explicitly set on the CLI.
@@ -114,6 +118,23 @@ func main() {
 		if cfg.MqttClientID != "" && !set["mqtt-client-id"]     { *mqttClientID = cfg.MqttClientID }
 		if cfg.MqttUser != "" && !set["mqtt-user"]              { *mqttUser = cfg.MqttUser }
 		if cfg.MqttPassword != "" && !set["mqtt-password"]      { *mqttPassword = cfg.MqttPassword }
+		if cfg.PayloadTemplate != "" && !set["payload-template"]           { *payloadTemplate = cfg.PayloadTemplate }
+		if cfg.PayloadTemplateFile != "" && !set["payload-template-file"]  { *payloadTemplateFile = cfg.PayloadTemplateFile }
+	}
+
+	// Initialize payload template (file takes precedence over inline string).
+	if *payloadTemplateFile != "" {
+		raw, err := os.ReadFile(*payloadTemplateFile)
+		if err != nil {
+			log.Fatalf("cannot read payload-template-file: %v", err)
+		}
+		if err := initTemplate(string(raw)); err != nil {
+			log.Fatalf("invalid payload template: %v", err)
+		}
+	} else if *payloadTemplate != "" {
+		if err := initTemplate(*payloadTemplate); err != nil {
+			log.Fatalf("invalid payload template: %v", err)
+		}
 	}
 
 	// Reseed before any random values are consumed.

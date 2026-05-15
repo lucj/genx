@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -37,7 +36,7 @@ func NewMqttSink(broker, topic, clientID string, qos int, user, password string)
 }
 
 func (s *MqttSink) Send(dp DataPoint) error {
-	b, err := json.Marshal(dp)
+	b, err := renderPayload(dp)
 	if err != nil {
 		return err
 	}

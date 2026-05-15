@@ -48,6 +48,9 @@ type Config struct {
 	MqttUser     string `yaml:"mqtt-user"`
 	MqttPassword string `yaml:"mqtt-password"`
 
+	PayloadTemplate     string `yaml:"payload-template"`
+	PayloadTemplateFile string `yaml:"payload-template-file"`
+
 	// Multi-field mode: when set, each key becomes a field in the payload.
 	// Curve flags (--type, --min, etc.) are ignored when Fields is present.
 	Fields map[string]FieldConfig `yaml:"fields"`

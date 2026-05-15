@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -19,7 +18,7 @@ func NewWebhookSink(url, token string) *WebhookSink {
 }
 
 func (s *WebhookSink) Send(dp DataPoint) error {
-	b, err := json.Marshal(dp)
+	b, err := renderPayload(dp)
 	if err != nil {
 		return err
 	}

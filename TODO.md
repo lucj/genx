@@ -72,6 +72,12 @@ Emit `{"fields": {"temperature": 22.4, "humidity": 58.1, "pressure": 1013.2}}` i
 Available via config file only (CLI flags remain single-value). Each field has its own
 independent curve type and parameters. Spread and noise apply per-field per-sample.
 
+### ✅ Custom payload template (`--payload-template` / `--payload-template-file`)
+Define the exact JSON shape using Go `text/template` syntax.
+Placeholders: `{{.Device}}`, `{{.Timestamp}}`, `{{.Value}}`, `{{.Fields.fieldname}}`.
+Template output is validated as JSON before sending. Inline string or file path accepted;
+also configurable via YAML (`payload-template:` / `payload-template-file:`).
+
 ### 🟢 CSV output
 `--format csv` on the stdout sink.
 Makes it easy to pipe into spreadsheets, InfluxDB line protocol converters, or Pandas.

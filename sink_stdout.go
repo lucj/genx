@@ -1,9 +1,6 @@
 package main
 
-import (
-	"encoding/json"
-	"fmt"
-)
+import "fmt"
 
 // StdoutSink prints each data point as JSON to stdout.
 type StdoutSink struct{}
@@ -11,7 +8,7 @@ type StdoutSink struct{}
 func NewStdoutSink() *StdoutSink { return &StdoutSink{} }
 
 func (s *StdoutSink) Send(dp DataPoint) error {
-	b, err := json.Marshal(dp)
+	b, err := renderPayload(dp)
 	if err != nil {
 		return err
 	}

@@ -1,10 +1,6 @@
 package main
 
-import (
-	"encoding/json"
-
-	"github.com/nats-io/nats.go"
-)
+import "github.com/nats-io/nats.go"
 
 // NatsSink publishes each data point to a NATS subject.
 type NatsSink struct {
@@ -28,7 +24,7 @@ func NewNatsSink(url, subject, user, password, token string) (*NatsSink, error) 
 }
 
 func (s *NatsSink) Send(dp DataPoint) error {
-	b, err := json.Marshal(dp)
+	b, err := renderPayload(dp)
 	if err != nil {
 		return err
 	}
