@@ -106,3 +106,22 @@ func TestReplayPreservesTimestampInBatchMode(t *testing.T) {
 		t.Errorf("batch mode should preserve original timestamp, got %d", sink.points[0].Timestamp)
 	}
 }
+
+func TestReplayRealtimeCancellation(t *testing.T) {
+	lines := []string{
+		`{"device":"sensor","timestamp":1000,"value":10.5}`,
+		`{"device":"sensor","timestamp":2000,"value":11.0}`,
+	}
+	path := writeTempReplayFile(t, lines)
+	sink := &captureSink{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before any tick fires
+
+	// step=10s means the ticker would block 10 s per point without cancellation.
+	runReplay(ctx, path, sink, true, 10)
+
+	if len(sink.points) != 0 {
+		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
+	}
+}
