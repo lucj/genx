@@ -36,6 +36,13 @@ func main() {
 	cosMax := flag.Float64("max", 25, "maximum value (cos)")
 	cosPeriod := flag.String("period", "1d", "period (cos), e.g. 1d, 12h")
 
+	// Random walk flags
+	walkStart := flag.Float64("walk-start", 100.0, "starting value (walk)")
+	walkStep := flag.Float64("walk-step", 1.0, "max delta magnitude per sample (walk)")
+	walkBias := flag.Float64("walk-bias", 0.0, "per-step directional drift (walk); negative = downward")
+	walkMin := flag.Float64("walk-min", 0.0, "lower clamp bound (walk); clamping disabled when walk-min == walk-max")
+	walkMax := flag.Float64("walk-max", 0.0, "upper clamp bound (walk); clamping disabled when walk-min == walk-max")
+
 	// Output sink flags
 	outputPtr := flag.String("output", "stdout", "output backend: stdout, webhook, nats, mqtt")
 
@@ -86,6 +93,11 @@ func main() {
 		if cfg.Min != nil && !set["min"]                        { *cosMin = *cfg.Min }
 		if cfg.Max != nil && !set["max"]                        { *cosMax = *cfg.Max }
 		if cfg.Period != "" && !set["period"]                   { *cosPeriod = cfg.Period }
+		if cfg.WalkStart != nil && !set["walk-start"]           { *walkStart = *cfg.WalkStart }
+		if cfg.WalkStep != nil && !set["walk-step"]             { *walkStep = *cfg.WalkStep }
+		if cfg.WalkBias != nil && !set["walk-bias"]             { *walkBias = *cfg.WalkBias }
+		if cfg.WalkMin != nil && !set["walk-min"]               { *walkMin = *cfg.WalkMin }
+		if cfg.WalkMax != nil && !set["walk-max"]               { *walkMax = *cfg.WalkMax }
 
 		if cfg.Output != "" && !set["output"]                   { *outputPtr = cfg.Output }
 		if cfg.WebhookURL != "" && !set["webhook-url"]          { *webhookURL = cfg.WebhookURL }
@@ -197,6 +209,7 @@ func main() {
 	}
 
 	// Single-field mode.
+	// Walk is handled per-device (stateful closure); all other types share a pure baseFn.
 	var baseFn func(float64) float64
 	switch *typePtr {
 	case "linear":
@@ -212,8 +225,10 @@ func main() {
 		baseFn = GetLog(start)
 	case "exp":
 		baseFn = GetExp(start, durationSeconds)
+	case "walk":
+		// baseFn intentionally left nil; each device gets its own closure below.
 	default:
-		log.Fatalf("unknown curve type %q (use cos, linear, log, exp)", *typePtr)
+		log.Fatalf("unknown curve type %q (use cos, linear, log, exp, walk)", *typePtr)
 	}
 
 	fns := make([]func(float64) float64, *devicesPtr)
@@ -222,9 +237,14 @@ func main() {
 		if *spreadPtr > 0 {
 			scale = 1.0 + *spreadPtr*(2*rng.Float64()-1)
 		}
-		fn := baseFn
-		s := scale
-		fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
+		if *typePtr == "walk" {
+			// Spread varies the starting value so devices begin at different levels.
+			fns[i] = WithNoise(GetRandomWalk(*walkStart*scale, *walkStep, *walkBias, *walkMin, *walkMax), *noisePtr)
+		} else {
+			fn := baseFn
+			s := scale
+			fns[i] = WithNoise(func(x float64) float64 { return fn(x) * s }, *noisePtr)
+		}
 	}
 
 	if *realtimePtr {

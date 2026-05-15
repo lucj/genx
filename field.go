@@ -10,6 +10,10 @@ type FieldConfig struct {
 	Min    *float64 `yaml:"min"`
 	Max    *float64 `yaml:"max"`
 	Period string   `yaml:"period"`
+	// Walk-specific parameters
+	WalkStart *float64 `yaml:"walk-start"`
+	WalkStep  *float64 `yaml:"walk-step"`
+	WalkBias  *float64 `yaml:"walk-bias"`
 }
 
 // buildFieldFn constructs a curve function from a FieldConfig.
@@ -48,7 +52,28 @@ func buildFieldFn(fc FieldConfig, start int64, durationSeconds int) (func(float6
 		return GetLog(start), nil
 	case "exp":
 		return GetExp(start, durationSeconds), nil
+	case "walk":
+		start := 100.0
+		if fc.WalkStart != nil {
+			start = *fc.WalkStart
+		}
+		step := 1.0
+		if fc.WalkStep != nil {
+			step = *fc.WalkStep
+		}
+		bias := 0.0
+		if fc.WalkBias != nil {
+			bias = *fc.WalkBias
+		}
+		wmin, wmax := 0.0, 0.0
+		if fc.Min != nil {
+			wmin = *fc.Min
+		}
+		if fc.Max != nil {
+			wmax = *fc.Max
+		}
+		return GetRandomWalk(start, step, bias, wmin, wmax), nil
 	default:
-		return nil, fmt.Errorf("unknown type %q (use cos, linear, log, exp)", fc.Type)
+		return nil, fmt.Errorf("unknown type %q (use cos, linear, log, exp, walk)", fc.Type)
 	}
 }

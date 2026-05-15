@@ -51,6 +51,54 @@ func TestGetLog(t *testing.T) {
 	}
 }
 
+func TestGetRandomWalkAdvances(t *testing.T) {
+	fn := GetRandomWalk(100, 1.0, 0, 0, 0)
+	seen := map[float64]bool{}
+	for range 20 {
+		seen[fn(0)] = true
+	}
+	if len(seen) == 1 {
+		t.Error("random walk should produce different values across calls")
+	}
+}
+
+func TestGetRandomWalkDownwardBias(t *testing.T) {
+	fn := GetRandomWalk(100, 0.1, -1.0, 0, 0) // strong downward bias
+	for range 50 {
+		fn(0)
+	}
+	if fn(0) >= 100 {
+		t.Error("downward bias should decrease value over time")
+	}
+}
+
+func TestGetRandomWalkClampedRange(t *testing.T) {
+	fn := GetRandomWalk(50, 100, -10, 0, 100) // aggressive walk, clamped [0,100]
+	for range 200 {
+		v := fn(0)
+		if v < 0 || v > 100 {
+			t.Errorf("value %f outside clamped range [0, 100]", v)
+		}
+	}
+}
+
+func TestGetRandomWalkReproducibleWithSeed(t *testing.T) {
+	initRand(42)
+	fn1 := GetRandomWalk(100, 1.0, -0.1, 0, 100)
+	vals := make([]float64, 10)
+	for i := range vals {
+		vals[i] = fn1(0)
+	}
+
+	initRand(42)
+	fn2 := GetRandomWalk(100, 1.0, -0.1, 0, 100)
+	for i, want := range vals {
+		if got := fn2(0); got != want {
+			t.Errorf("step %d: seed 42 should be reproducible: got %f, want %f", i, got, want)
+		}
+	}
+}
+
 func TestWithNoiseZero(t *testing.T) {
 	base := func(x float64) float64 { return 100.0 }
 	fn := WithNoise(base, 0)

@@ -51,6 +51,20 @@ func TestBuildFieldFnExp(t *testing.T) {
 	}
 }
 
+func TestBuildFieldFnWalk(t *testing.T) {
+	start := 100.0
+	fc := FieldConfig{Type: "walk", WalkStart: &start}
+	fn, err := buildFieldFn(fc, time.Now().Unix(), 3600)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Walk should produce a value close to start on the first call
+	v := fn(0)
+	if v < 90 || v > 110 {
+		t.Errorf("first walk value %f unexpectedly far from start 100", v)
+	}
+}
+
 func TestBuildFieldFnUnknownType(t *testing.T) {
 	fc := FieldConfig{Type: "unknown"}
 	_, err := buildFieldFn(fc, time.Now().Unix(), 3600)

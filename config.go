@@ -26,6 +26,12 @@ type Config struct {
 	Min    *float64 `yaml:"min"`
 	Max    *float64 `yaml:"max"`
 	Period string   `yaml:"period"`
+	// Walk-specific
+	WalkStart *float64 `yaml:"walk-start"`
+	WalkStep  *float64 `yaml:"walk-step"`
+	WalkBias  *float64 `yaml:"walk-bias"`
+	WalkMin   *float64 `yaml:"walk-min"`
+	WalkMax   *float64 `yaml:"walk-max"`
 
 	Output       string `yaml:"output"`
 	WebhookURL   string `yaml:"webhook-url"`
