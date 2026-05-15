@@ -1,5 +1,41 @@
 services:
 
+  # Webhook echo server — logs every incoming POST request with headers and body
+  # Start: docker compose up webhook
+  # Test with:
+  #   docker run --rm --network host ghcr.io/lucj/genx \
+  #     --output webhook --webhook-url http://localhost:8080 \
+  #     --webhook-token mytoken --type cos --duration 1m --step 5s --realtime
+  # View received payloads: docker compose logs -f webhook
+  webhook:
+    image: mendhak/http-https-echo:latest
+    container_name: genx-webhook
+    ports:
+      - "8080:8080"
+    environment:
+      HTTP_PORT: "8080"
+
+  # MQTT broker (anonymous, no authentication)
+  # Start: docker compose up mqtt
+  # Test with:
+  #   docker run --rm --network host ghcr.io/lucj/genx \
+  #     --output mqtt --mqtt-broker tcp://localhost:1883 --mqtt-topic genx \
+  #     --type cos --duration 1m --step 5s --realtime
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: genx-mqtt
+    ports:
+      - "1883:1883"
+    command: ["sh", "-c", "printf 'listener 1883\\nallow_anonymous true\\n' > /tmp/m.conf && mosquitto -c /tmp/m.conf"]
+
+  # Optional subscriber — see MQTT messages arriving in real time
+  # Usage: docker compose run --rm mqtt-sub
+  mqtt-sub:
+    image: eclipse-mosquitto:2
+    profiles: ["sub"]
+    depends_on: [mqtt]
+    entrypoint: ["mosquitto_sub", "-h", "mqtt", "-t", "genx", "-v"]
+
   # NATS with user/password authentication
   # Test with:
   #   genx --output nats --nats-url nats://localhost:4222 \
