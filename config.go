@@ -45,8 +45,12 @@ type Config struct {
 	MqttTopic    string `yaml:"mqtt-topic"`
 	MqttQoS      *int   `yaml:"mqtt-qos"`
 	MqttClientID string `yaml:"mqtt-client-id"`
-	MqttUser     string `yaml:"mqtt-user"`
-	MqttPassword string `yaml:"mqtt-password"`
+	MqttUser        string `yaml:"mqtt-user"`
+	MqttPassword    string `yaml:"mqtt-password"`
+	MqttCACert      string `yaml:"mqtt-ca-cert"`
+	MqttCert        string `yaml:"mqtt-cert"`
+	MqttKey         string `yaml:"mqtt-key"`
+	MqttTLSInsecure *bool  `yaml:"mqtt-tls-insecure"`
 
 	PayloadTemplate     string `yaml:"payload-template"`
 	PayloadTemplateFile string `yaml:"payload-template-file"`

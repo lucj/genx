@@ -22,13 +22,17 @@ type sinkConfig struct {
 	natsUser     string
 	natsPassword string
 	natsToken    string
-	mqttBroker   string
-	mqttTopic    string
-	mqttClientID string
-	mqttQoS      int
-	mqttUser     string
-	mqttPassword string
-	renderer     Renderer
+	mqttBroker      string
+	mqttTopic       string
+	mqttClientID    string
+	mqttQoS         int
+	mqttUser        string
+	mqttPassword    string
+	mqttCACert      string
+	mqttCert        string
+	mqttKey         string
+	mqttTLSInsecure bool
+	renderer        Renderer
 }
 
 func buildSink(cfg sinkConfig) (Sink, error) {
@@ -43,7 +47,7 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 	case "nats":
 		return NewNatsSink(cfg.natsURL, cfg.natsSubject, cfg.natsUser, cfg.natsPassword, cfg.natsToken, cfg.renderer)
 	case "mqtt":
-		return NewMqttSink(cfg.mqttBroker, cfg.mqttTopic, cfg.mqttClientID, cfg.mqttQoS, cfg.mqttUser, cfg.mqttPassword, cfg.renderer)
+		return NewMqttSink(cfg.mqttBroker, cfg.mqttTopic, cfg.mqttClientID, cfg.mqttQoS, cfg.mqttUser, cfg.mqttPassword, cfg.mqttCACert, cfg.mqttCert, cfg.mqttKey, cfg.mqttTLSInsecure, cfg.renderer)
 	default:
 		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt)", cfg.output)
 	}
@@ -104,6 +108,10 @@ func main() {
 	mqttClientID := flag.String("mqtt-client-id", fmt.Sprintf("genx-%d", os.Getpid()), "MQTT client ID")
 	mqttUser := flag.String("mqtt-user", "", "MQTT username")
 	mqttPassword := flag.String("mqtt-password", "", "MQTT password")
+	mqttCACert := flag.String("mqtt-ca-cert", "", "path to CA certificate file for verifying the broker's TLS certificate")
+	mqttCert := flag.String("mqtt-cert", "", "path to client certificate file for mTLS authentication")
+	mqttKey := flag.String("mqtt-key", "", "path to client private key file for mTLS authentication")
+	mqttTLSInsecure := flag.Bool("mqtt-tls-insecure", false, "skip broker TLS certificate verification (use only for testing)")
 
 	// Payload template flags
 	payloadTemplateStr := flag.String("payload-template", "", "Go text/template string for JSON payload")
@@ -156,8 +164,12 @@ func main() {
 		if cfg.MqttTopic != "" && !set["mqtt-topic"]           { *mqttTopic = cfg.MqttTopic }
 		if cfg.MqttQoS != nil && !set["mqtt-qos"]              { *mqttQoS = *cfg.MqttQoS }
 		if cfg.MqttClientID != "" && !set["mqtt-client-id"]    { *mqttClientID = cfg.MqttClientID }
-		if cfg.MqttUser != "" && !set["mqtt-user"]             { *mqttUser = cfg.MqttUser }
-		if cfg.MqttPassword != "" && !set["mqtt-password"]     { *mqttPassword = cfg.MqttPassword }
+		if cfg.MqttUser != "" && !set["mqtt-user"]                   { *mqttUser = cfg.MqttUser }
+		if cfg.MqttPassword != "" && !set["mqtt-password"]           { *mqttPassword = cfg.MqttPassword }
+		if cfg.MqttCACert != "" && !set["mqtt-ca-cert"]              { *mqttCACert = cfg.MqttCACert }
+		if cfg.MqttCert != "" && !set["mqtt-cert"]                   { *mqttCert = cfg.MqttCert }
+		if cfg.MqttKey != "" && !set["mqtt-key"]                     { *mqttKey = cfg.MqttKey }
+		if cfg.MqttTLSInsecure != nil && !set["mqtt-tls-insecure"]   { *mqttTLSInsecure = *cfg.MqttTLSInsecure }
 		if cfg.PayloadTemplate != "" && !set["payload-template"]          { *payloadTemplateStr = cfg.PayloadTemplate }
 		if cfg.PayloadTemplateFile != "" && !set["payload-template-file"] { *payloadTemplateFile = cfg.PayloadTemplateFile }
 	}
@@ -202,9 +214,13 @@ func main() {
 		mqttTopic:    *mqttTopic,
 		mqttClientID: *mqttClientID,
 		mqttQoS:      *mqttQoS,
-		mqttUser:     *mqttUser,
-		mqttPassword: *mqttPassword,
-		renderer:     renderer,
+		mqttUser:        *mqttUser,
+		mqttPassword:    *mqttPassword,
+		mqttCACert:      *mqttCACert,
+		mqttCert:        *mqttCert,
+		mqttKey:         *mqttKey,
+		mqttTLSInsecure: *mqttTLSInsecure,
+		renderer:        renderer,
 	})
 	if err != nil {
 		log.Fatalf("sink: %v", err)
