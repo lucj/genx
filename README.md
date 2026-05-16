@@ -359,6 +359,7 @@ $ genx --config config.yaml
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--config` | | Path to YAML config file (CLI flags take precedence) |
+| `--generate-config` | | Print a sample YAML config file to stdout and exit |
 | `--type` | `cos` | Curve type: `cos`, `linear`, `log`, `exp`, `walk` |
 | `--duration` | `1d` | Total duration (e.g. `2d`, `6h`, `30m`) |
 | `--step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |
