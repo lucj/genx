@@ -51,6 +51,9 @@ type Config struct {
 	MqttCert        string `yaml:"mqtt-cert"`
 	MqttKey         string `yaml:"mqtt-key"`
 	MqttTLSInsecure *bool  `yaml:"mqtt-tls-insecure"`
+	// MqttDeviceCerts maps device name to its own client cert/key pair.
+	// The shared --mqtt-ca-cert still applies to all per-device connections.
+	MqttDeviceCerts map[string]MqttDeviceCert `yaml:"mqtt-device-certs"`
 
 	PayloadTemplate     string `yaml:"payload-template"`
 	PayloadTemplateFile string `yaml:"payload-template-file"`
@@ -58,6 +61,12 @@ type Config struct {
 	// Multi-field mode: when set, each key becomes a field in the payload.
 	// Curve flags (--type, --min, etc.) are ignored when Fields is present.
 	Fields map[string]FieldConfig `yaml:"fields"`
+}
+
+// MqttDeviceCert holds the client cert/key pair for a single device.
+type MqttDeviceCert struct {
+	Cert string `yaml:"cert"`
+	Key  string `yaml:"key"`
 }
 
 func LoadConfig(path string) (*Config, error) {
