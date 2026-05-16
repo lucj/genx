@@ -32,6 +32,7 @@ type sinkConfig struct {
 	mqttCert        string
 	mqttKey         string
 	mqttTLSInsecure bool
+	mqttDeviceCerts map[string]MqttDeviceCert
 	renderer        Renderer
 }
 
@@ -47,7 +48,7 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 	case "nats":
 		return NewNatsSink(cfg.natsURL, cfg.natsSubject, cfg.natsUser, cfg.natsPassword, cfg.natsToken, cfg.renderer)
 	case "mqtt":
-		return NewMqttSink(cfg.mqttBroker, cfg.mqttTopic, cfg.mqttClientID, cfg.mqttQoS, cfg.mqttUser, cfg.mqttPassword, cfg.mqttCACert, cfg.mqttCert, cfg.mqttKey, cfg.mqttTLSInsecure, cfg.renderer)
+		return NewMqttSink(cfg.mqttBroker, cfg.mqttTopic, cfg.mqttClientID, cfg.mqttQoS, cfg.mqttUser, cfg.mqttPassword, cfg.mqttCACert, cfg.mqttCert, cfg.mqttKey, cfg.mqttTLSInsecure, cfg.mqttDeviceCerts, cfg.renderer)
 	default:
 		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt)", cfg.output)
 	}
@@ -112,6 +113,7 @@ func main() {
 	mqttCert := flag.String("mqtt-cert", "", "path to client certificate file for mTLS authentication")
 	mqttKey := flag.String("mqtt-key", "", "path to client private key file for mTLS authentication")
 	mqttTLSInsecure := flag.Bool("mqtt-tls-insecure", false, "skip broker TLS certificate verification (use only for testing)")
+	var mqttDeviceCerts map[string]MqttDeviceCert
 
 	// Payload template flags
 	payloadTemplateStr := flag.String("payload-template", "", "Go text/template string for JSON payload")
@@ -170,6 +172,7 @@ func main() {
 		if cfg.MqttCert != "" && !set["mqtt-cert"]                   { *mqttCert = cfg.MqttCert }
 		if cfg.MqttKey != "" && !set["mqtt-key"]                     { *mqttKey = cfg.MqttKey }
 		if cfg.MqttTLSInsecure != nil && !set["mqtt-tls-insecure"]   { *mqttTLSInsecure = *cfg.MqttTLSInsecure }
+		mqttDeviceCerts = cfg.MqttDeviceCerts
 		if cfg.PayloadTemplate != "" && !set["payload-template"]          { *payloadTemplateStr = cfg.PayloadTemplate }
 		if cfg.PayloadTemplateFile != "" && !set["payload-template-file"] { *payloadTemplateFile = cfg.PayloadTemplateFile }
 	}
@@ -220,6 +223,7 @@ func main() {
 		mqttCert:        *mqttCert,
 		mqttKey:         *mqttKey,
 		mqttTLSInsecure: *mqttTLSInsecure,
+		mqttDeviceCerts: mqttDeviceCerts,
 		renderer:        renderer,
 	})
 	if err != nil {

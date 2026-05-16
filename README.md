@@ -190,6 +190,32 @@ docker run --network genx-net ghcr.io/lucj/genx \
     -output nats -nats-url nats://nats:4222 -nats-subject sensors.temp
 ```
 
+Example `fleet.yaml` for per-device mTLS:
+```yaml
+output: mqtt
+mqtt-broker: ssl://localhost:8883
+mqtt-topic: sensors
+mqtt-ca-cert: ca.crt
+
+type: cos
+devices: 3
+device: sensor
+duration: 1h
+step: 1m
+realtime: true
+
+mqtt-device-certs:
+  sensor-0:
+    cert: certs/sensor-0.crt
+    key:  certs/sensor-0.key
+  sensor-1:
+    cert: certs/sensor-1.crt
+    key:  certs/sensor-1.key
+  sensor-2:
+    cert: certs/sensor-2.crt
+    key:  certs/sensor-2.key
+```
+
 A `docker-compose.yml` is included to start NATS instances with user/password and token auth for local testing — see the comments inside for usage instructions.
 
 ### MQTT
@@ -206,10 +232,15 @@ $ genx --type cos --duration 1h --step 5m \
 $ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
        --mqtt-ca-cert ca.crt --type cos --duration 1h --step 1m
 
-# Mutual TLS (client certificate authentication)
+# Mutual TLS (single shared client certificate)
 $ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
        --mqtt-ca-cert ca.crt --mqtt-cert client.crt --mqtt-key client.key \
        --type cos --duration 1h --step 1m
+
+# Mutual TLS with per-device certificates (YAML config only)
+# Each device gets its own connection using its own cert/key pair.
+# --mqtt-ca-cert still applies to all connections.
+$ genx --config fleet.yaml
 
 # Skip broker certificate verification (testing only)
 $ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
@@ -366,5 +397,6 @@ $ genx --config config.yaml
 | `--mqtt-cert` | | Path to client certificate file for mTLS authentication |
 | `--mqtt-key` | | Path to client private key file for mTLS authentication |
 | `--mqtt-tls-insecure` | false | Skip broker TLS certificate verification (testing only) |
+| `mqtt-device-certs` (YAML only) | | Map of device name → `{cert, key}` for per-device mTLS |
 | `--payload-template` | | Go `text/template` string for the JSON payload |
 | `--payload-template-file` | | Path to a Go `text/template` file for the JSON payload |
