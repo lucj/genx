@@ -1,12 +1,10 @@
 services:
 
-  # Webhook echo server — logs every incoming POST request with headers and body
-  # Start: docker compose up webhook
-  # Test with:
-  #   docker run --rm --network host ghcr.io/lucj/genx \
-  #     --output webhook --webhook-url http://localhost:8080 \
-  #     --webhook-token mytoken --type cos --duration 1m --step 5s --realtime
-  # View received payloads: docker compose logs -f webhook
+  # ---------------------------------------------------------------------------
+  # Webhook
+  # ---------------------------------------------------------------------------
+
+  # Echo server — logs every incoming POST with headers and body.
   webhook:
     image: mendhak/http-https-echo:latest
     container_name: genx-webhook
@@ -14,65 +12,223 @@ services:
       - "8080:8080"
     environment:
       HTTP_PORT: "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
 
-  # MQTT broker (anonymous, no authentication)
-  # Start: docker compose up mqtt
-  # Test with:
-  #   docker run --rm --network host ghcr.io/lucj/genx \
-  #     --output mqtt --mqtt-broker tcp://localhost:1883 --mqtt-topic genx \
-  #     --type cos --duration 1m --step 5s --realtime
+  # Run: docker compose --profile test-webhook up
+  # genx sends 6 points (one every 5 s) to the echo server.
+  # Watch: docker compose logs -f webhook
+  test-webhook:
+    image: ghcr.io/lucj/genx:latest
+    profiles: [test-webhook]
+    depends_on:
+      webhook:
+        condition: service_healthy
+    command: >
+      -output webhook
+      -webhook-url http://webhook:8080
+      -webhook-token secret
+      -type cos -duration 30s -step 5s -realtime
+
+  # ---------------------------------------------------------------------------
+  # MQTT
+  # ---------------------------------------------------------------------------
+
+  # Anonymous broker — no authentication required.
   mqtt:
     image: eclipse-mosquitto:2
     container_name: genx-mqtt
     ports:
       - "1883:1883"
-    command: ["sh", "-c", "printf 'listener 1883\\nallow_anonymous true\\n' > /tmp/m.conf && mosquitto -c /tmp/m.conf"]
+    command:
+      - sh
+      - -c
+      - |
+        { echo 'listener 1883'; echo 'allow_anonymous true'; } > /tmp/m.conf
+        mosquitto -c /tmp/m.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "healthcheck", "-m", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
 
-  # Optional subscriber — see MQTT messages arriving in real time
+  # Username / password broker (alice / secret).
+  mqtt-auth:
+    image: eclipse-mosquitto:2
+    container_name: genx-mqtt-auth
+    ports:
+      - "1884:1883"
+    command:
+      - sh
+      - -c
+      - |
+        mosquitto_passwd -c -b /tmp/passwd alice secret
+        chown mosquitto:mosquitto /tmp/passwd && chmod 700 /tmp/passwd
+        { echo 'listener 1883'; echo 'allow_anonymous false'; echo 'password_file /tmp/passwd'; } > /tmp/m.conf
+        mosquitto -c /tmp/m.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "healthcheck", "-m", "ping", "-u", "alice", "-P", "secret"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  # Subscribers — watch messages arriving in real time.
   # Usage: docker compose run --rm mqtt-sub
   mqtt-sub:
     image: eclipse-mosquitto:2
-    profiles: ["sub"]
-    depends_on: [mqtt]
+    profiles: [sub, test-mqtt]
+    depends_on:
+      mqtt:
+        condition: service_healthy
     entrypoint: ["mosquitto_sub", "-h", "mqtt", "-t", "genx", "-v"]
 
-  # NATS with user/password authentication
-  # Test with:
-  #   genx --output nats --nats-url nats://localhost:4222 \
-  #         --nats-user alice --nats-password secret \
-  #         --type cos --duration 1m --step 5s --realtime
+  # Usage: docker compose run --rm mqtt-auth-sub
+  mqtt-auth-sub:
+    image: eclipse-mosquitto:2
+    profiles: [sub, test-mqtt-auth]
+    depends_on:
+      mqtt-auth:
+        condition: service_healthy
+    entrypoint: ["mosquitto_sub", "-h", "mqtt-auth", "-t", "genx", "-v", "-u", "alice", "-P", "secret"]
+
+  # Run: docker compose --profile test-mqtt up
+  test-mqtt:
+    image: ghcr.io/lucj/genx:latest
+    profiles: [test-mqtt]
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    command: >
+      -output mqtt
+      -mqtt-broker tcp://mqtt:1883
+      -type cos -duration 30s -step 5s -realtime
+
+  # Run: docker compose --profile test-mqtt-auth up
+  test-mqtt-auth:
+    image: ghcr.io/lucj/genx:latest
+    profiles: [test-mqtt-auth]
+    depends_on:
+      mqtt-auth:
+        condition: service_healthy
+    command: >
+      -output mqtt
+      -mqtt-broker tcp://mqtt-auth:1883
+      -mqtt-user alice
+      -mqtt-password secret
+      -type cos -duration 30s -step 5s -realtime
+
+  # ---------------------------------------------------------------------------
+  # NATS
+  # ---------------------------------------------------------------------------
+
+  # No authentication.
+  nats:
+    image: nats:2.10-alpine
+    container_name: genx-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--http_port", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8222/healthz"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  # Username / password authentication (alice / secret).
   nats-userpass:
     image: nats:2.10-alpine
     container_name: genx-nats-userpass
     ports:
-      - "4222:4222"   # client connections
-      - "8222:8222"   # HTTP monitoring  →  http://localhost:8222
+      - "4223:4222"
+      - "8223:8222"
     command: ["--user", "alice", "--pass", "secret", "--http_port", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8222/healthz"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
 
-  # NATS with token authentication
-  # Test with:
-  #   genx --output nats --nats-url nats://localhost:4223 \
-  #         --nats-token mysecrettoken \
-  #         --type cos --duration 1m --step 5s --realtime
+  # Token authentication.
   nats-token:
     image: nats:2.10-alpine
     container_name: genx-nats-token
     ports:
-      - "4223:4222"   # client connections
-      - "8223:8222"   # HTTP monitoring  →  http://localhost:8223
+      - "4224:4222"
+      - "8224:8222"
     command: ["--auth", "mysecrettoken", "--http_port", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8222/healthz"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
 
-  # Optional subscriber — see messages arriving in real time
+  # Subscribers — watch messages arriving in real time.
+  # Usage: docker compose run --rm nats-sub
+  nats-sub:
+    image: natsio/nats-box:latest
+    profiles: [sub, test-nats]
+    depends_on:
+      nats:
+        condition: service_healthy
+    entrypoint: ["nats", "sub", "--server", "nats://nats:4222", "genx"]
+
   # Usage: docker compose run --rm nats-sub-userpass
   nats-sub-userpass:
     image: natsio/nats-box:latest
-    profiles: ["sub"]
-    depends_on: [nats-userpass]
+    profiles: [sub, test-nats-userpass]
+    depends_on:
+      nats-userpass:
+        condition: service_healthy
     entrypoint: ["nats", "sub", "--server", "nats://alice:secret@nats-userpass:4222", "genx"]
 
   # Usage: docker compose run --rm nats-sub-token
   nats-sub-token:
     image: natsio/nats-box:latest
-    profiles: ["sub"]
-    depends_on: [nats-token]
+    profiles: [sub, test-nats-token]
+    depends_on:
+      nats-token:
+        condition: service_healthy
     entrypoint: ["nats", "sub", "--server", "nats://mysecrettoken@nats-token:4222", "genx"]
+
+  # Run: docker compose --profile test-nats up
+  test-nats:
+    image: ghcr.io/lucj/genx:latest
+    profiles: [test-nats]
+    depends_on:
+      nats:
+        condition: service_healthy
+    command: >
+      -output nats
+      -nats-url nats://nats:4222
+      -type cos -duration 30s -step 5s -realtime
+
+  # Run: docker compose --profile test-nats-userpass up
+  test-nats-userpass:
+    image: ghcr.io/lucj/genx:latest
+    profiles: [test-nats-userpass]
+    depends_on:
+      nats-userpass:
+        condition: service_healthy
+    command: >
+      -output nats
+      -nats-url nats://nats-userpass:4222
+      -nats-user alice
+      -nats-password secret
+      -type cos -duration 30s -step 5s -realtime
+
+  # Run: docker compose --profile test-nats-token up
+  test-nats-token:
+    image: ghcr.io/lucj/genx:latest
+    profiles: [test-nats-token]
+    depends_on:
+      nats-token:
+        condition: service_healthy
+    command: >
+      -output nats
+      -nats-url nats://nats-token:4222
+      -nats-token mysecrettoken
+      -type cos -duration 30s -step 5s -realtime
