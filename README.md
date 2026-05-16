@@ -194,12 +194,26 @@ A `docker-compose.yml` is included to start NATS instances with user/password an
 
 ### MQTT
 
-Publishes to an MQTT topic. Supports username/password authentication:
+Publishes to an MQTT topic. Supports username/password and TLS/mTLS authentication:
 
 ```
+# Username / password
 $ genx --type cos --duration 1h --step 5m \
        --output mqtt --mqtt-broker tcp://localhost:1883 --mqtt-topic home/temperature \
        --mqtt-user myuser --mqtt-password mypassword
+
+# TLS with custom CA (verify broker certificate)
+$ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
+       --mqtt-ca-cert ca.crt --type cos --duration 1h --step 1m
+
+# Mutual TLS (client certificate authentication)
+$ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
+       --mqtt-ca-cert ca.crt --mqtt-cert client.crt --mqtt-key client.key \
+       --type cos --duration 1h --step 1m
+
+# Skip broker certificate verification (testing only)
+$ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
+       --mqtt-tls-insecure --type cos --duration 1h --step 1m
 ```
 
 ## Multi-field payloads
@@ -348,5 +362,9 @@ $ genx --config config.yaml
 | `--mqtt-client-id` | `genx-<pid>` | MQTT client ID |
 | `--mqtt-user` | | MQTT username |
 | `--mqtt-password` | | MQTT password |
+| `--mqtt-ca-cert` | | Path to CA certificate file for verifying the broker's TLS certificate |
+| `--mqtt-cert` | | Path to client certificate file for mTLS authentication |
+| `--mqtt-key` | | Path to client private key file for mTLS authentication |
+| `--mqtt-tls-insecure` | false | Skip broker TLS certificate verification (testing only) |
 | `--payload-template` | | Go `text/template` string for the JSON payload |
 | `--payload-template-file` | | Path to a Go `text/template` file for the JSON payload |
