@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -70,13 +71,19 @@ type MqttDeviceCert struct {
 }
 
 func LoadConfig(path string) (*Config, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
+	var r io.Reader
+	if path == "-" {
+		r = os.Stdin
+	} else {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		r = f
 	}
-	defer f.Close()
 	var cfg Config
-	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
+	if err := yaml.NewDecoder(r).Decode(&cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
