@@ -23,3 +23,31 @@ jobs:
 
       - name: Test
         run: go test -v -race ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - test-webhook
+          - test-mqtt
+          - test-mqtt-auth
+          - test-mqtt-tls
+          - test-mqtt-mtls
+          - test-nats
+          - test-nats-userpass
+          - test-nats-token
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ${{ matrix.profile }}
+        run: |
+          docker compose --profile ${{ matrix.profile }} up \
+            --build \
+            --abort-on-container-exit \
+            --exit-code-from ${{ matrix.profile }}
+
+      - name: Teardown
+        if: always()
+        run: docker compose --profile ${{ matrix.profile }} down -v
