@@ -56,6 +56,31 @@ nats-subject: iot
 	}
 }
 
+func TestLoadConfigStdin(t *testing.T) {
+	yaml := "type: linear\nduration: 2h\n"
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.WriteString(yaml)
+	w.Close()
+
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+
+	cfg, err := LoadConfig("-")
+	if err != nil {
+		t.Fatalf("LoadConfig(\"-\") error: %v", err)
+	}
+	if cfg.Type != "linear" {
+		t.Errorf("expected type linear, got %q", cfg.Type)
+	}
+	if cfg.Duration != "2h" {
+		t.Errorf("expected duration 2h, got %q", cfg.Duration)
+	}
+}
+
 func TestLoadConfigMissingFile(t *testing.T) {
 	_, err := LoadConfig("/nonexistent/path/config.yaml")
 	if err == nil {
