@@ -1,0 +1,6 @@
+{
+  "CN": "mqtt-tls",
+  "hosts": ["mqtt-tls", "mqtt-mtls", "localhost", "127.0.0.1"],
+  "key": { "algo": "rsa", "size": 2048 },
+  "names": [{ "O": "genx", "OU": "test" }]
+}

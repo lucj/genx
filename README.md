@@ -18,6 +18,20 @@ Or build locally:
 go build -o genx . && ./genx [flags]
 ```
 
+Generate a cosine curve, one point every 15 minutes over 1 hour:
+```
+$ genx --type cos --min 18 --max 26 --duration 1h --step 15m
+{"device":"device","timestamp":1715000000,"value":26.00}
+{"device":"device","timestamp":1715054400,"value":22.00}
+{"device":"device","timestamp":1715108800,"value":18.00}
+{"device":"device","timestamp":1715163200,"value":22.00}
+```
+
+Use `--generate-config` to print a fully commented YAML template covering every option:
+```
+$ genx --generate-config > config.yaml
+```
+
 ## Curve types
 
 ### Linear
@@ -171,26 +185,7 @@ $ genx --output nats --nats-url nats://localhost:4222 \
        --type cos --duration 1h --step 1m --realtime
 ```
 
-**End-to-end example with a containerised NATS server:**
-
-```bash
-# 1. shared network
-docker network create genx-net
-
-# 2. NATS server
-docker run -d --name nats --network genx-net nats
-
-# 3. subscriber (another terminal)
-docker run --rm --network genx-net natsio/nats-box \
-    nats sub -s nats://nats:4222 sensors.temp
-
-# 4. generate and publish
-docker run --network genx-net ghcr.io/lucj/genx \
-    -type linear -duration 1h -step 1m \
-    -output nats -nats-url nats://nats:4222 -nats-subject sensors.temp
-```
-
-A `docker-compose.yml` is included for local testing — it covers NATS (no auth, user/password, token), MQTT (anonymous, user/password), and a webhook echo server. See the comments inside for usage instructions.
+A `docker-compose.yml` is included for local testing — it covers NATS (no auth, user/password, token), MQTT (anonymous, user/password, TLS, mTLS), and a webhook echo server. See the comments inside for usage instructions.
 
 ### MQTT
 
@@ -319,13 +314,6 @@ $ genx --type cos --duration 1h --step 5m \
 
 ```
 $ genx --config multi.yaml --payload-template-file template.json
-```
-
-Template can also be set in the YAML config:
-```yaml
-payload-template: '{"id":"{{.Device}}","ts":{{.Timestamp}},"val":{{.Value}}}'
-# or
-payload-template-file: template.json
 ```
 
 ## YAML config file
