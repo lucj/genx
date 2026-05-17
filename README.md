@@ -1,6 +1,6 @@
 # genx
 
-**genx** is a lightweight time-series data generator. It emits synthetic measurements following a mathematical curve — useful for testing dashboards, messaging pipelines, or IoT simulators.
+**genx** is a lightweight time-series data generator. It emits synthetic measurements following a mathematical curve, useful for testing dashboards, messaging pipelines, or IoT simulators.
 
 Each data point is output as JSON:
 ```json
@@ -48,7 +48,7 @@ $ docker run ghcr.io/lucj/genx -type linear -duration 3d -first 10 -last 30 -ste
 
 ### Random walk
 
-Drifts by a random delta each sample — useful for simulating battery drain, temperature drift, or stock prices.
+Drifts by a random delta each sample. Useful for simulating battery drain, temperature drift, or stock prices.
 
 ```
 $ genx --type walk --walk-start 100 --walk-step 2 --walk-bias -0.1 \
@@ -124,7 +124,7 @@ $ genx --type cos --noise 0.05 --duration 1h --step 1m
 
 ## Realtime mode
 
-By default genx generates the full dataset instantly (batch mode). Add `--realtime` to emit one point per `--step` interval using the actual wall clock — handy for live pipeline testing.
+By default genx generates the full dataset instantly (batch mode). Add `--realtime` to emit one point per `--step` interval using the actual wall clock, useful for live pipeline testing.
 
 ```
 $ docker run ghcr.io/lucj/genx -type cos -min 18 -max 26 -duration 1h -step 10s --realtime
@@ -185,7 +185,7 @@ $ genx --output nats --nats-url nats://localhost:4222 \
        --type cos --duration 1h --step 1m --realtime
 ```
 
-A `docker-compose.yml` is included for local testing — it covers NATS (no auth, user/password, token), MQTT (anonymous, user/password, TLS, mTLS), and a webhook echo server. See the comments inside for usage instructions.
+A `docker-compose.yml` is included for local testing. It covers NATS (no auth, user/password, token), MQTT (anonymous, user/password, TLS, mTLS), and a webhook echo server. See the comments inside for usage instructions.
 
 ### MQTT
 
@@ -246,7 +246,7 @@ $ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
 
 ## Multi-field payloads
 
-Emit multiple named fields in a single data point — for example temperature, humidity, and pressure from the same device. This mode is available via a YAML config file (see below).
+Emit multiple named fields in a single data point, for example temperature, humidity, and pressure from the same device. This mode is available via a YAML config file (see below).
 
 Example config (`multi.yaml`):
 ```yaml
@@ -342,6 +342,12 @@ nats-password: secret
 
 ```
 $ genx --config config.yaml
+```
+
+Pass `-` to read the config from stdin. This is useful when running via Docker without a volume mount:
+
+```
+$ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 ```
 
 ## All flags
