@@ -22,7 +22,7 @@ services:
   # genx sends 6 points (one every 5 s) to the echo server.
   # Watch: docker compose logs -f webhook
   test-webhook:
-    image: ghcr.io/lucj/genx:latest
+    build: .
     profiles: [test-webhook]
     depends_on:
       webhook:
@@ -96,7 +96,7 @@ services:
 
   # Run: docker compose --profile test-mqtt up
   test-mqtt:
-    image: ghcr.io/lucj/genx:latest
+    build: .
     profiles: [test-mqtt]
     depends_on:
       mqtt:
@@ -108,7 +108,7 @@ services:
 
   # Run: docker compose --profile test-mqtt-auth up
   test-mqtt-auth:
-    image: ghcr.io/lucj/genx:latest
+    build: .
     profiles: [test-mqtt-auth]
     depends_on:
       mqtt-auth:
@@ -118,6 +118,119 @@ services:
       -mqtt-broker tcp://mqtt-auth:1883
       -mqtt-user alice
       -mqtt-password secret
+      -type cos -duration 30s -step 5s -realtime
+
+  # TLS broker — verifies client against the CA, no client cert required.
+  mqtt-tls:
+    image: eclipse-mosquitto:2
+    container_name: genx-mqtt-tls
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./certs:/certs:ro
+    command:
+      - sh
+      - -c
+      - |
+        { echo 'listener 8883'
+          echo 'allow_anonymous true'
+          echo 'cafile /certs/ca.pem'
+          echo 'certfile /certs/server.pem'
+          echo 'keyfile /certs/server-key.pem'
+          echo 'tls_version tlsv1.2'; } > /tmp/m.conf
+        mosquitto -c /tmp/m.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-p", "8883",
+             "--cafile", "/certs/ca.pem", "-t", "healthcheck", "-m", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  # mTLS broker — requires a valid client certificate signed by the CA.
+  mqtt-mtls:
+    image: eclipse-mosquitto:2
+    container_name: genx-mqtt-mtls
+    ports:
+      - "8884:8883"
+    volumes:
+      - ./certs:/certs:ro
+    command:
+      - sh
+      - -c
+      - |
+        { echo 'listener 8883'
+          echo 'allow_anonymous true'
+          echo 'cafile /certs/ca.pem'
+          echo 'certfile /certs/server.pem'
+          echo 'keyfile /certs/server-key.pem'
+          echo 'require_certificate true'
+          echo 'tls_version tlsv1.2'; } > /tmp/m.conf
+        mosquitto -c /tmp/m.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-p", "8883",
+             "--cafile", "/certs/ca.pem",
+             "--cert", "/certs/sensor-0.pem", "--key", "/certs/sensor-0-key.pem",
+             "-t", "healthcheck", "-m", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  # Usage: docker compose run --rm mqtt-tls-sub
+  mqtt-tls-sub:
+    image: eclipse-mosquitto:2
+    profiles: [sub, test-mqtt-tls]
+    depends_on:
+      mqtt-tls:
+        condition: service_healthy
+    volumes:
+      - ./certs:/certs:ro
+    entrypoint: ["mosquitto_sub", "-h", "mqtt-tls", "-p", "8883",
+                 "--cafile", "/certs/ca.pem", "-t", "genx", "-v"]
+
+  # Usage: docker compose run --rm mqtt-mtls-sub
+  mqtt-mtls-sub:
+    image: eclipse-mosquitto:2
+    profiles: [sub, test-mqtt-mtls]
+    depends_on:
+      mqtt-mtls:
+        condition: service_healthy
+    volumes:
+      - ./certs:/certs:ro
+    entrypoint: ["mosquitto_sub", "-h", "mqtt-mtls", "-p", "8883",
+                 "--cafile", "/certs/ca.pem",
+                 "--cert", "/certs/sensor-0.pem", "--key", "/certs/sensor-0-key.pem",
+                 "-t", "genx", "-v"]
+
+  # Run: docker compose --profile test-mqtt-tls up
+  test-mqtt-tls:
+    build: .
+    profiles: [test-mqtt-tls]
+    depends_on:
+      mqtt-tls:
+        condition: service_healthy
+    volumes:
+      - ./certs:/certs:ro
+    command: >
+      -output mqtt
+      -mqtt-broker ssl://mqtt-tls:8883
+      -mqtt-ca-cert /certs/ca.pem
+      -type cos -duration 30s -step 5s -realtime
+
+  # Run: docker compose --profile test-mqtt-mtls up
+  test-mqtt-mtls:
+    build: .
+    profiles: [test-mqtt-mtls]
+    depends_on:
+      mqtt-mtls:
+        condition: service_healthy
+    volumes:
+      - ./certs:/certs:ro
+    command: >
+      -output mqtt
+      -mqtt-broker ssl://mqtt-mtls:8883
+      -mqtt-ca-cert /certs/ca.pem
+      -mqtt-cert /certs/sensor-0.pem
+      -mqtt-key /certs/sensor-0-key.pem
       -type cos -duration 30s -step 5s -realtime
 
   # ---------------------------------------------------------------------------
@@ -196,7 +309,7 @@ services:
 
   # Run: docker compose --profile test-nats up
   test-nats:
-    image: ghcr.io/lucj/genx:latest
+    build: .
     profiles: [test-nats]
     depends_on:
       nats:
@@ -208,7 +321,7 @@ services:
 
   # Run: docker compose --profile test-nats-userpass up
   test-nats-userpass:
-    image: ghcr.io/lucj/genx:latest
+    build: .
     profiles: [test-nats-userpass]
     depends_on:
       nats-userpass:
@@ -222,7 +335,7 @@ services:
 
   # Run: docker compose --profile test-nats-token up
   test-nats-token:
-    image: ghcr.io/lucj/genx:latest
+    build: .
     profiles: [test-nats-token]
     depends_on:
       nats-token:

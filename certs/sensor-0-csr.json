@@ -1,0 +1,5 @@
+{
+  "CN": "sensor-0",
+  "key": { "algo": "rsa", "size": 2048 },
+  "names": [{ "O": "genx", "OU": "test" }]
+}
