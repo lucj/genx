@@ -124,6 +124,11 @@ func main() {
 
 	flag.Parse()
 
+	if len(os.Args) == 1 {
+		flag.Usage()
+		os.Exit(0)
+	}
+
 	if *generateConfig {
 		printSampleConfig()
 		return
