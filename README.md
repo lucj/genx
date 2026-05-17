@@ -190,7 +190,34 @@ docker run --network genx-net ghcr.io/lucj/genx \
     -output nats -nats-url nats://nats:4222 -nats-subject sensors.temp
 ```
 
-Example `fleet.yaml` for per-device mTLS:
+A `docker-compose.yml` is included for local testing — it covers NATS (no auth, user/password, token), MQTT (anonymous, user/password), and a webhook echo server. See the comments inside for usage instructions.
+
+### MQTT
+
+Publishes to an MQTT topic. Supports username/password and TLS/mTLS authentication:
+
+```
+# Username / password
+$ genx --type cos --duration 1h --step 5m \
+       --output mqtt --mqtt-broker tcp://localhost:1883 --mqtt-topic home/temperature \
+       --mqtt-user myuser --mqtt-password mypassword
+
+# TLS with custom CA (verify broker certificate)
+$ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
+       --mqtt-ca-cert ca.crt --type cos --duration 1h --step 1m
+
+# Mutual TLS (single shared client certificate)
+$ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
+       --mqtt-ca-cert ca.crt --mqtt-cert client.crt --mqtt-key client.key \
+       --type cos --duration 1h --step 1m
+
+# Mutual TLS with per-device certificates (YAML config only)
+# Each device gets its own connection using its own cert/key pair.
+# --mqtt-ca-cert still applies to all connections.
+$ genx --config fleet.yaml
+```
+
+Example `fleet.yaml`:
 ```yaml
 output: mqtt
 mqtt-broker: ssl://localhost:8883
@@ -216,32 +243,7 @@ mqtt-device-certs:
     key:  certs/sensor-2.key
 ```
 
-A `docker-compose.yml` is included to start NATS instances with user/password and token auth for local testing — see the comments inside for usage instructions.
-
-### MQTT
-
-Publishes to an MQTT topic. Supports username/password and TLS/mTLS authentication:
-
 ```
-# Username / password
-$ genx --type cos --duration 1h --step 5m \
-       --output mqtt --mqtt-broker tcp://localhost:1883 --mqtt-topic home/temperature \
-       --mqtt-user myuser --mqtt-password mypassword
-
-# TLS with custom CA (verify broker certificate)
-$ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
-       --mqtt-ca-cert ca.crt --type cos --duration 1h --step 1m
-
-# Mutual TLS (single shared client certificate)
-$ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
-       --mqtt-ca-cert ca.crt --mqtt-cert client.crt --mqtt-key client.key \
-       --type cos --duration 1h --step 1m
-
-# Mutual TLS with per-device certificates (YAML config only)
-# Each device gets its own connection using its own cert/key pair.
-# --mqtt-ca-cert still applies to all connections.
-$ genx --config fleet.yaml
-
 # Skip broker certificate verification (testing only)
 $ genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-topic sensors \
        --mqtt-tls-insecure --type cos --duration 1h --step 1m
@@ -359,6 +361,7 @@ $ genx --config config.yaml
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--config` | | Path to YAML config file (CLI flags take precedence) |
+| `--generate-config` | | Print a sample YAML config file to stdout and exit |
 | `--type` | `cos` | Curve type: `cos`, `linear`, `log`, `exp`, `walk` |
 | `--duration` | `1d` | Total duration (e.g. `2d`, `6h`, `30m`) |
 | `--step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |

@@ -119,7 +119,15 @@ func main() {
 	payloadTemplateStr := flag.String("payload-template", "", "Go text/template string for JSON payload")
 	payloadTemplateFile := flag.String("payload-template-file", "", "path to a Go text/template file for JSON payload")
 
+	// Utility flags
+	generateConfig := flag.Bool("generate-config", false, "print a sample YAML config file and exit")
+
 	flag.Parse()
+
+	if *generateConfig {
+		printSampleConfig()
+		return
+	}
 
 	// Load config and apply values for flags not explicitly set on the CLI.
 	var cfg *Config
