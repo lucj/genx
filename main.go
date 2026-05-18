@@ -59,7 +59,7 @@ func main() {
 	configPtr := flag.String("config", "", "path to YAML config file (CLI flags take precedence)")
 
 	// Curve flags
-	typePtr := flag.String("type", "cos", "type of curve: cos, linear, log, exp, walk")
+	typePtr := flag.String("type", "walk", "type of curve: cos, linear, log, exp, walk")
 	durationPtr := flag.String("duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
 	stepPtr := flag.String("step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
 	devicePtr := flag.String("device", "device", "device/sensor name (or prefix when --devices > 1)")
@@ -84,14 +84,15 @@ func main() {
 	cosPeriod := flag.String("period", "1d", "period (cos), e.g. 1d, 12h")
 
 	// Random walk flags
-	walkStart := flag.Float64("walk-start", 100.0, "starting value (walk)")
-	walkStep := flag.Float64("walk-step", 1.0, "max delta magnitude per sample (walk)")
+	walkStart := flag.Float64("walk-start", 20.0, "starting value (walk)")
+	walkStep := flag.Float64("walk-step", 0.5, "max delta magnitude per sample (walk)")
 	walkBias := flag.Float64("walk-bias", 0.0, "per-step directional drift (walk); negative = downward")
-	walkMin := flag.Float64("walk-min", 0.0, "lower clamp bound (walk); clamping disabled when walk-min == walk-max")
-	walkMax := flag.Float64("walk-max", 0.0, "upper clamp bound (walk); clamping disabled when walk-min == walk-max")
+	walkMin := flag.Float64("walk-min", 15.0, "lower clamp bound (walk); clamping disabled when walk-min == walk-max")
+	walkMax := flag.Float64("walk-max", 35.0, "upper clamp bound (walk); clamping disabled when walk-min == walk-max")
 
 	// Output sink flags
 	outputPtr := flag.String("output", "stdout", "output backend: stdout, webhook, nats, mqtt")
+	isoTimePtr := flag.Bool("iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
 
 	// Webhook flags
 	webhookURL := flag.String("webhook-url", "", "webhook URL (required for --output webhook)")
@@ -137,6 +138,9 @@ func main() {
 	}
 
 	// Load config and apply values for flags not explicitly set on the CLI.
+	set := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
 	var cfg *Config
 	if *configPtr != "" {
 		c, err := LoadConfig(*configPtr)
@@ -144,8 +148,6 @@ func main() {
 			log.Fatalf("failed to load config: %v", err)
 		}
 		cfg = c
-		set := map[string]bool{}
-		flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
 
 		if cfg.Type != "" && !set["type"]                      { *typePtr = cfg.Type }
 		if cfg.Duration != "" && !set["duration"]              { *durationPtr = cfg.Duration }
@@ -196,6 +198,9 @@ func main() {
 
 	// Build the renderer (file takes precedence over inline string).
 	renderer := Renderer(JSONRenderer)
+	if *isoTimePtr {
+		renderer = ISOJSONRenderer
+	}
 	if *payloadTemplateFile != "" {
 		raw, err := os.ReadFile(*payloadTemplateFile)
 		if err != nil {
@@ -205,19 +210,31 @@ func main() {
 		if err != nil {
 			log.Fatalf("invalid payload template: %v", err)
 		}
-		renderer = NewTemplateRenderer(tmpl)
+		renderer = NewTemplateRenderer(tmpl, *isoTimePtr)
 	} else if *payloadTemplateStr != "" {
 		tmpl, err := template.New("payload").Parse(*payloadTemplateStr)
 		if err != nil {
 			log.Fatalf("invalid payload template: %v", err)
 		}
-		renderer = NewTemplateRenderer(tmpl)
+		renderer = NewTemplateRenderer(tmpl, *isoTimePtr)
 	}
 
 	// Initialise RNG (seeded before any random values are consumed).
 	rng := newRand()
 	if *seedPtr != 0 {
 		rng = seededRand(uint64(*seedPtr))
+	}
+
+	// Infer output sink from sink-specific flags when --output was not set explicitly.
+	if !set["output"] {
+		switch {
+		case set["webhook-url"]:
+			*outputPtr = "webhook"
+		case set["nats-url"]:
+			*outputPtr = "nats"
+		case set["mqtt-broker"]:
+			*outputPtr = "mqtt"
+		}
 	}
 
 	// Build the output sink.

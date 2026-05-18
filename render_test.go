@@ -25,7 +25,7 @@ func TestJSONRenderer(t *testing.T) {
 
 func TestTemplateRenderer(t *testing.T) {
 	tmpl := template.Must(template.New("p").Parse(`{"sensor":"{{.Device}}","ts":{{.Timestamp}},"val":{{.Value}}}`))
-	render := NewTemplateRenderer(tmpl)
+	render := NewTemplateRenderer(tmpl, false)
 
 	dp := DataPoint{Device: "sensor-a", Timestamp: 9999, Value: ptrF(7.5)}
 	b, err := render(dp)
@@ -46,7 +46,7 @@ func TestTemplateRenderer(t *testing.T) {
 
 func TestTemplateRendererWithFields(t *testing.T) {
 	tmpl := template.Must(template.New("p").Parse(`{"device":"{{.Device}}","temp":{{.Fields.temperature}}}`))
-	render := NewTemplateRenderer(tmpl)
+	render := NewTemplateRenderer(tmpl, false)
 
 	dp := DataPoint{
 		Device:    "room1",
@@ -68,7 +68,7 @@ func TestTemplateRendererWithFields(t *testing.T) {
 
 func TestTemplateRendererNonJSON(t *testing.T) {
 	tmpl := template.Must(template.New("p").Parse(`not json at all {{.Device}}`))
-	render := NewTemplateRenderer(tmpl)
+	render := NewTemplateRenderer(tmpl, false)
 	dp := DataPoint{Device: "x", Timestamp: 1}
 	if _, err := render(dp); err == nil {
 		t.Fatal("expected error for non-JSON template output")
@@ -77,7 +77,7 @@ func TestTemplateRendererNonJSON(t *testing.T) {
 
 func TestTemplateRendererNilValue(t *testing.T) {
 	tmpl := template.Must(template.New("p").Parse(`{"device":"{{.Device}}","val":{{.Value}}}`))
-	render := NewTemplateRenderer(tmpl)
+	render := NewTemplateRenderer(tmpl, false)
 
 	// Value is nil — template should see 0.0, not <nil>
 	dp := DataPoint{Device: "dev", Timestamp: 1, Value: nil}
