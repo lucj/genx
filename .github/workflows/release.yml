@@ -3,11 +3,15 @@ name: Release
 on:
   push:
     branches: [main]
+    tags: ['v*.*.*']
   pull_request:
     types: [opened, synchronize, reopened]
 
 jobs:
-  build-and-push:
+  # Builds and pushes the Docker image.
+  # On main: tags with 'latest' and the short SHA.
+  # On a version tag: also tags with the semver version (e.g. v0.1.0).
+  docker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,6 +36,7 @@ jobs:
           tags: |
             type=ref,event=pr
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
             type=sha,prefix=sha-,format=short
 
       - name: Set up Docker Buildx
@@ -47,3 +52,35 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Builds static binaries and creates a GitHub release.
+  # Runs only when a version tag (e.g. v0.1.0) is pushed.
+  binaries:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build static binaries
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o genx-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o genx-linux-arm64 .
+
+      - name: Create GitHub release
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            genx-linux-amd64 \
+            genx-linux-arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
