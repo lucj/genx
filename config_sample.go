@@ -16,6 +16,8 @@ device: sensor   # device name, or prefix when devices > 1
 devices: 1       # number of devices to simulate simultaneously
 spread: 0        # per-device value spread ratio  (0.1 = ±10%)
 noise: 0         # per-sample noise ratio          (0.05 = ±5%)
+anomaly-rate: 0  # probability of injecting a spike or drop per point (0.02 = 2%)
+anomaly-factor: 3 # anomaly magnitude: spike = value × factor, drop = value / factor
 realtime: false  # emit one point per step using the real wall clock
 seed: 0          # RNG seed for reproducible output (0 = random)
 

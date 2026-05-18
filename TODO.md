@@ -11,7 +11,7 @@ Items marked ✅ are implemented.
 These are picked for differentiation — no other lightweight CLI simulator does all three well:
 
 1. ~~**Multi-field payloads**~~ ✅ — closes the biggest gap vs real IoT devices; makes the tool credible for actual teams, not just demos
-2. **Anomaly injection** — unique angle: test your alerting pipeline without crafting edge cases by hand
+2. ~~**Anomaly injection**~~ ✅ — unique angle: test your alerting pipeline without crafting edge cases by hand
 3. ~~**Reproducible runs (`--seed`)**~~ ✅ — makes genx CI-ready and scenario-shareable; rare in data simulation tools
 
 ---
@@ -22,10 +22,10 @@ These are picked for differentiation — no other lightweight CLI simulator does
 `--noise <ratio>` adds multiplicative random jitter to every sample (e.g. `0.05` = ±5%).
 Raw sensor data is never a perfect mathematical function.
 
-### 🔴 Anomaly injection
-`--anomaly-rate <probability>` randomly spikes or drops a value (e.g. `0.01` = 1% of points).
-Unique feature: lets you test alert pipelines and anomaly-detection systems without hand-crafting
-edge-case datasets. No other lightweight CLI simulator does this out of the box.
+### ✅ Anomaly injection
+`--anomaly-rate <probability>` randomly spikes or drops a value (e.g. `0.02` = 2% of points).
+`--anomaly-factor` controls the spike/drop magnitude (default 3). Works in single-field, multi-field,
+and fleet mode.
 
 ### 🟡 Missing data / dropouts
 `--dropout-rate <probability>` randomly skips sending a point.

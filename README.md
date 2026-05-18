@@ -122,6 +122,16 @@ $ genx --type cos --noise 0.05 --duration 1h --step 1m
 
 `--noise 0.05` multiplies each value by a random factor in `[0.95, 1.05]`. Works in both single-device and fleet mode.
 
+## Anomaly injection
+
+Randomly inject spikes or drops into the data stream with `--anomaly-rate`. Useful for testing alerting rules and anomaly-detection systems.
+
+```
+$ genx --type cos --duration 1h --step 1m --anomaly-rate 0.02 --anomaly-factor 5
+```
+
+`--anomaly-rate 0.02` means roughly 2% of points will be anomalies. Each anomaly is either a spike (value × factor) or a drop (value / factor), chosen at random. `--anomaly-factor` defaults to `3`.
+
 ## Realtime mode
 
 By default genx generates the full dataset instantly (batch mode). Add `--realtime` to emit one point per `--step` interval using the actual wall clock, useful for live pipeline testing.
@@ -363,6 +373,8 @@ $ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--devices` | `1` | Number of devices to simulate simultaneously |
 | `--spread` | `0` | Per-device value spread as a ratio (e.g. `0.1` = ±10%) |
 | `--noise` | `0` | Random noise per sample as a ratio (e.g. `0.05` = ±5%) |
+| `--anomaly-rate` | `0` | Probability of injecting a spike or drop per point (e.g. `0.02` = 2%) |
+| `--anomaly-factor` | `3` | Anomaly magnitude multiplier: spike = value × factor, drop = value / factor |
 | `--realtime` | false | Emit one point per step using real wall-clock time |
 | `--seed` | `0` | Fix the RNG seed for reproducible output (0 = random) |
 | `--min` | `10` | Min value (cos) |

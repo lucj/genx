@@ -66,6 +66,8 @@ func main() {
 	devicesPtr := flag.Int("devices", 1, "number of devices to simulate simultaneously")
 	spreadPtr := flag.Float64("spread", 0.0, "per-device value spread as a ratio, e.g. 0.1 = ±10%")
 	noisePtr := flag.Float64("noise", 0.0, "random noise added to every sample as a ratio, e.g. 0.05 = ±5%")
+	anomalyRatePtr   := flag.Float64("anomaly-rate", 0.0, "probability of injecting an anomaly per point, e.g. 0.02 = 2%")
+	anomalyFactorPtr := flag.Float64("anomaly-factor", 3.0, "anomaly magnitude multiplier: spike = value × factor, drop = value / factor")
 	realtimePtr := flag.Bool("realtime", false, "real-time mode: emit one point per step interval")
 	seedPtr := flag.Int64("seed", 0, "random seed for reproducible output (0 = random); batch mode only")
 
@@ -151,8 +153,10 @@ func main() {
 		if cfg.Device != "" && !set["device"]                  { *devicePtr = cfg.Device }
 		if cfg.Devices != nil && !set["devices"]               { *devicesPtr = *cfg.Devices }
 		if cfg.Spread != nil && !set["spread"]                 { *spreadPtr = *cfg.Spread }
-		if cfg.Noise != nil && !set["noise"]                   { *noisePtr = *cfg.Noise }
-		if cfg.Realtime != nil && !set["realtime"]             { *realtimePtr = *cfg.Realtime }
+		if cfg.Noise != nil && !set["noise"]                         { *noisePtr = *cfg.Noise }
+		if cfg.AnomalyRate != nil && !set["anomaly-rate"]             { *anomalyRatePtr = *cfg.AnomalyRate }
+		if cfg.AnomalyFactor != nil && !set["anomaly-factor"]         { *anomalyFactorPtr = *cfg.AnomalyFactor }
+		if cfg.Realtime != nil && !set["realtime"]                    { *realtimePtr = *cfg.Realtime }
 		if cfg.Seed != nil && !set["seed"]                     { *seedPtr = *cfg.Seed }
 		if cfg.ReplayFile != "" && !set["replay-file"]         { *replayFilePtr = cfg.ReplayFile }
 
@@ -309,9 +313,9 @@ func main() {
 			}
 		}
 		if *realtimePtr {
-			runRealtimeMulti(ctx, rng, fieldFns, scales, *noisePtr, sink, devices, itemCount, stepSeconds)
+			runRealtimeMulti(ctx, rng, fieldFns, scales, *noisePtr, *anomalyRatePtr, *anomalyFactorPtr, sink, devices, itemCount, stepSeconds)
 		} else {
-			runBatchMulti(rng, fieldFns, scales, *noisePtr, sink, devices, start, itemCount, stepSeconds)
+			runBatchMulti(rng, fieldFns, scales, *noisePtr, *anomalyRatePtr, *anomalyFactorPtr, sink, devices, start, itemCount, stepSeconds)
 		}
 		return
 	}
@@ -346,11 +350,11 @@ func main() {
 		}
 		if *typePtr == "walk" {
 			// Spread varies the starting value so devices begin at different levels.
-			fns[i] = WithNoise(rng, GetRandomWalk(rng, *walkStart*scale, *walkStep, *walkBias, *walkMin, *walkMax), *noisePtr)
+			fns[i] = WithAnomaly(rng, WithNoise(rng, GetRandomWalk(rng, *walkStart*scale, *walkStep, *walkBias, *walkMin, *walkMax), *noisePtr), *anomalyRatePtr, *anomalyFactorPtr)
 		} else {
 			fn := baseFn
 			s := scale
-			fns[i] = WithNoise(rng, func(x float64) float64 { return fn(x) * s }, *noisePtr)
+			fns[i] = WithAnomaly(rng, WithNoise(rng, func(x float64) float64 { return fn(x) * s }, *noisePtr), *anomalyRatePtr, *anomalyFactorPtr)
 		}
 	}
 	if *realtimePtr {
