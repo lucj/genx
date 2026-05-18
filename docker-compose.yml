@@ -28,10 +28,10 @@ services:
       webhook:
         condition: service_healthy
     command: >
-      -output webhook
-      -webhook-url http://webhook:8080
-      -webhook-token secret
-      -type cos -duration 30s -step 5s -realtime
+      --output webhook
+      --webhook-url http://webhook:8080
+      --webhook-token secret
+      --type cos --duration 30s --step 5s --realtime
 
   # ---------------------------------------------------------------------------
   # MQTT
@@ -102,9 +102,9 @@ services:
       mqtt:
         condition: service_healthy
     command: >
-      -output mqtt
-      -mqtt-broker tcp://mqtt:1883
-      -type cos -duration 30s -step 5s -realtime
+      --output mqtt
+      --mqtt-broker tcp://mqtt:1883
+      --type cos --duration 30s --step 5s --realtime
 
   # Run: docker compose --profile test-mqtt-auth up
   test-mqtt-auth:
@@ -114,11 +114,11 @@ services:
       mqtt-auth:
         condition: service_healthy
     command: >
-      -output mqtt
-      -mqtt-broker tcp://mqtt-auth:1883
-      -mqtt-user alice
-      -mqtt-password secret
-      -type cos -duration 30s -step 5s -realtime
+      --output mqtt
+      --mqtt-broker tcp://mqtt-auth:1883
+      --mqtt-user alice
+      --mqtt-password secret
+      --type cos --duration 30s --step 5s --realtime
 
   # TLS broker — verifies client against the CA, no client cert required.
   mqtt-tls:
@@ -211,10 +211,10 @@ services:
     volumes:
       - ./certs:/certs:ro
     command: >
-      -output mqtt
-      -mqtt-broker ssl://mqtt-tls:8883
-      -mqtt-ca-cert /certs/ca.pem
-      -type cos -duration 30s -step 5s -realtime
+      --output mqtt
+      --mqtt-broker ssl://mqtt-tls:8883
+      --mqtt-ca-cert /certs/ca.pem
+      --type cos --duration 30s --step 5s --realtime
 
   # Run: docker compose --profile test-mqtt-mtls up
   test-mqtt-mtls:
@@ -226,12 +226,12 @@ services:
     volumes:
       - ./certs:/certs:ro
     command: >
-      -output mqtt
-      -mqtt-broker ssl://mqtt-mtls:8883
-      -mqtt-ca-cert /certs/ca.pem
-      -mqtt-cert /certs/sensor-0.pem
-      -mqtt-key /certs/sensor-0-key.pem
-      -type cos -duration 30s -step 5s -realtime
+      --output mqtt
+      --mqtt-broker ssl://mqtt-mtls:8883
+      --mqtt-ca-cert /certs/ca.pem
+      --mqtt-cert /certs/sensor-0.pem
+      --mqtt-key /certs/sensor-0-key.pem
+      --type cos --duration 30s --step 5s --realtime
 
   # ---------------------------------------------------------------------------
   # NATS
@@ -315,9 +315,9 @@ services:
       nats:
         condition: service_healthy
     command: >
-      -output nats
-      -nats-url nats://nats:4222
-      -type cos -duration 30s -step 5s -realtime
+      --output nats
+      --nats-url nats://nats:4222
+      --type cos --duration 30s --step 5s --realtime
 
   # Run: docker compose --profile test-nats-userpass up
   test-nats-userpass:
@@ -327,11 +327,11 @@ services:
       nats-userpass:
         condition: service_healthy
     command: >
-      -output nats
-      -nats-url nats://nats-userpass:4222
-      -nats-user alice
-      -nats-password secret
-      -type cos -duration 30s -step 5s -realtime
+      --output nats
+      --nats-url nats://nats-userpass:4222
+      --nats-user alice
+      --nats-password secret
+      --type cos --duration 30s --step 5s --realtime
 
   # Run: docker compose --profile test-nats-token up
   test-nats-token:
@@ -341,7 +341,7 @@ services:
       nats-token:
         condition: service_healthy
     command: >
-      -output nats
-      -nats-url nats://nats-token:4222
-      -nats-token mysecrettoken
-      -type cos -duration 30s -step 5s -realtime
+      --output nats
+      --nats-url nats://nats-token:4222
+      --nats-token mysecrettoken
+      --type cos --duration 30s --step 5s --realtime
