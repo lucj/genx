@@ -17,8 +17,10 @@ type Config struct {
 	Device   string   `yaml:"device"`
 	Devices    *int     `yaml:"devices"`
 	Spread     *float64 `yaml:"spread"`
-	Noise      *float64 `yaml:"noise"`
-	Realtime   *bool    `yaml:"realtime"`
+	Noise         *float64 `yaml:"noise"`
+	AnomalyRate   *float64 `yaml:"anomaly-rate"`
+	AnomalyFactor *float64 `yaml:"anomaly-factor"`
+	Realtime      *bool    `yaml:"realtime"`
 	Seed       *int64   `yaml:"seed"`
 	ReplayFile string   `yaml:"replay-file"`
 

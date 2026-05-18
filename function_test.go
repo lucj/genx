@@ -139,6 +139,56 @@ func TestWithNoiseAddsVariation(t *testing.T) {
 	}
 }
 
+func TestWithAnomalyZeroRate(t *testing.T) {
+	rng := seededRand(1)
+	base := func(_ float64) float64 { return 10.0 }
+	fn := WithAnomaly(rng, base, 0, 5)
+	for range 20 {
+		if fn(0) != 10.0 {
+			t.Error("zero rate: value should always be 10.0")
+		}
+	}
+}
+
+func TestWithAnomalyFactorOne(t *testing.T) {
+	rng := seededRand(1)
+	base := func(_ float64) float64 { return 10.0 }
+	fn := WithAnomaly(rng, base, 1.0, 1.0)
+	for range 20 {
+		if fn(0) != 10.0 {
+			t.Error("factor=1: value should always be 10.0")
+		}
+	}
+}
+
+func TestWithAnomalyAlwaysTriggered(t *testing.T) {
+	rng := seededRand(42)
+	base := func(_ float64) float64 { return 10.0 }
+	fn := WithAnomaly(rng, base, 1.0, 5.0)
+	for range 50 {
+		v := fn(0)
+		if math.Abs(v-50) > 1e-9 && math.Abs(v-2) > 1e-9 {
+			t.Errorf("anomaly value %f is neither spike (50) nor drop (2)", v)
+		}
+	}
+}
+
+func TestWithAnomalyProducesOutliers(t *testing.T) {
+	rng := seededRand(7)
+	base := func(_ float64) float64 { return 10.0 }
+	fn := WithAnomaly(rng, base, 0.5, 10.0)
+	outliers := 0
+	for range 200 {
+		v := fn(0)
+		if v != 10.0 {
+			outliers++
+		}
+	}
+	if outliers == 0 {
+		t.Error("expected some anomalies with rate=0.5, got none")
+	}
+}
+
 func TestGetExp(t *testing.T) {
 	start := time.Now().Unix()
 	duration := 3600

@@ -52,12 +52,12 @@ func runRealtime(ctx context.Context, fns []func(float64) float64, sink Sink, de
 	wg.Wait()
 }
 
-func runBatchMulti(rng *rand.Rand, fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, start int64, count, stepSeconds int) {
+func runBatchMulti(rng *rand.Rand, fieldFns map[string]func(float64) float64, scales []float64, noise, anomalyRate, anomalyFactor float64, sink Sink, devices []string, start int64, count, stepSeconds int) {
 	for d, device := range devices {
 		scale := scales[d]
 		for i := 0; i < count; i++ {
 			ts := start + int64(i*stepSeconds)
-			dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(rng, fieldFns, scale, noise, float64(ts))}
+			dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(rng, fieldFns, scale, noise, anomalyRate, anomalyFactor, float64(ts))}
 			if err := sink.Send(dp); err != nil {
 				log.Printf("send error: %v", err)
 			}
@@ -65,7 +65,7 @@ func runBatchMulti(rng *rand.Rand, fieldFns map[string]func(float64) float64, sc
 	}
 }
 
-func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]func(float64) float64, scales []float64, noise float64, sink Sink, devices []string, count, stepSeconds int) {
+func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]func(float64) float64, scales []float64, noise, anomalyRate, anomalyFactor float64, sink Sink, devices []string, count, stepSeconds int) {
 	var wg sync.WaitGroup
 	for d, device := range devices {
 		wg.Add(1)
@@ -81,7 +81,7 @@ func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]f
 				case <-ticker.C:
 				}
 				ts := time.Now().Unix()
-				dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(rng, fieldFns, scale, noise, float64(ts))}
+				dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(rng, fieldFns, scale, noise, anomalyRate, anomalyFactor, float64(ts))}
 				if err := sink.Send(dp); err != nil {
 					log.Printf("send error: %v", err)
 				}
@@ -95,12 +95,19 @@ func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]f
 	wg.Wait()
 }
 
-func evalFields(rng *rand.Rand, fieldFns map[string]func(float64) float64, scale, noise, x float64) map[string]float64 {
+func evalFields(rng *rand.Rand, fieldFns map[string]func(float64) float64, scale, noise, anomalyRate, anomalyFactor, x float64) map[string]float64 {
 	fields := make(map[string]float64, len(fieldFns))
 	for name, fn := range fieldFns {
 		v := fn(x) * scale
 		if noise > 0 {
 			v *= 1 + noise*(2*rng.Float64()-1)
+		}
+		if anomalyRate > 0 && anomalyFactor > 1 && rng.Float64() < anomalyRate {
+			if rng.Float64() < 0.5 {
+				v *= anomalyFactor
+			} else {
+				v /= anomalyFactor
+			}
 		}
 		fields[name] = v
 	}

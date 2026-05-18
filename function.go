@@ -71,3 +71,22 @@ func WithNoise(rng *rand.Rand, fn func(float64) float64, noise float64) func(flo
 		return fn(x) * (1 + noise*(2*rng.Float64()-1))
 	}
 }
+
+// WithAnomaly wraps fn so that each call has a `rate` probability of injecting
+// an anomaly: a spike (value × factor) or a drop (value / factor), chosen at random.
+// WithAnomaly(rng, fn, 0, _) returns fn unchanged.
+func WithAnomaly(rng *rand.Rand, fn func(float64) float64, rate, factor float64) func(float64) float64 {
+	if rate <= 0 || factor <= 1 {
+		return fn
+	}
+	return func(x float64) float64 {
+		v := fn(x)
+		if rng.Float64() < rate {
+			if rng.Float64() < 0.5 {
+				return v * factor
+			}
+			return v / factor
+		}
+		return v
+	}
+}
