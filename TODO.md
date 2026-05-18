@@ -78,9 +78,11 @@ Placeholders: `{{.Device}}`, `{{.Timestamp}}`, `{{.Value}}`, `{{.Fields.fieldnam
 Template output is validated as JSON before sending. Inline string or file path accepted;
 also configurable via YAML (`payload-template:` / `payload-template-file:`).
 
-### 🟢 CSV output
-`--format csv` on the stdout sink.
+### ✅ CSV output
+`--format csv` on the stdout and file sinks.
 Makes it easy to pipe into spreadsheets, InfluxDB line protocol converters, or Pandas.
+Header row emitted once on the first point; columns sorted A-Z in multi-field mode.
+Compatible with `--iso-time`.
 
 ---
 

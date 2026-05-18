@@ -37,7 +37,8 @@ type Config struct {
 	WalkMin   *float64 `yaml:"walk-min"`
 	WalkMax   *float64 `yaml:"walk-max"`
 
-	Output       string `yaml:"output"`
+	Output  string `yaml:"output"`
+	Format  string `yaml:"format"`
 	WebhookURL   string `yaml:"webhook-url"`
 	WebhookToken string `yaml:"webhook-token"`
 	NatsURL      string `yaml:"nats-url"`

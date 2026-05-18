@@ -108,6 +108,7 @@ func main() {
 
 		// Output
 		output  string
+		format  string
 		isoTime bool
 
 		// Payload template
@@ -234,6 +235,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.KafkaPassword != "" && !changed("kafka-password")       { kafkaPassword = cfg.KafkaPassword }
 				if cfg.KafkaTLS != nil && !changed("kafka-tls")                { kafkaTLS = *cfg.KafkaTLS }
 				if cfg.KafkaTLSInsecure != nil && !changed("kafka-tls-insecure") { kafkaTLSInsecure = *cfg.KafkaTLSInsecure }
+				if cfg.Format != "" && !changed("format")                            { format = cfg.Format }
 				if cfg.PayloadTemplate != "" && !changed("payload-template")          { payloadTemplate = cfg.PayloadTemplate }
 				if cfg.PayloadTemplateFile != "" && !changed("payload-template-file") { payloadTemplateFile = cfg.PayloadTemplateFile }
 			}
@@ -254,10 +256,18 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}
 
-			// Build the renderer (file takes precedence over inline string).
+			// Build the renderer (template takes precedence over format).
 			renderer := Renderer(JSONRenderer)
 			if isoTime {
 				renderer = ISOJSONRenderer
+			}
+			switch format {
+			case "csv":
+				renderer = NewCSVRenderer(isoTime)
+			case "json", "":
+				// already set above
+			default:
+				return fmt.Errorf("unknown --format %q (use json or csv)", format)
 			}
 			if payloadTemplateFile != "" {
 				raw, err := os.ReadFile(payloadTemplateFile)
@@ -486,6 +496,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 
 	// Output
 	f.StringVar(&output, "output", "stdout", "output backend: stdout, webhook, nats, mqtt")
+	f.StringVar(&format, "format", "json", "output format for stdout/file sinks: json or csv")
 	f.BoolVar(&isoTime, "iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
 	f.StringVar(&payloadTemplate, "payload-template", "", "Go text/template string for JSON payload")
 	f.StringVar(&payloadTemplateFile, "payload-template-file", "", "path to a Go text/template file for JSON payload")
@@ -535,7 +546,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		{"Cosine curve (--type cos)", []string{"min", "max", "period"}},
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
-		{"Output", []string{"output", "iso-time"}},
+		{"Output", []string{"output", "format", "iso-time"}},
 		{"Template", []string{"payload-template", "payload-template-file"}},
 		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},
 		{"NATS (--output nats)", []string{"nats-url", "nats-subject", "nats-user", "nats-password", "nats-token"}},

@@ -42,6 +42,7 @@ period: 1d
 # Output sink
 # ---------------------------------------------------------------------------
 output: stdout   # stdout | webhook | nats | mqtt | file | kafka
+format: json     # json | csv  (stdout and file sinks only)
 
 # Kafka
 # kafka-brokers: localhost:9092   # comma-separated broker addresses

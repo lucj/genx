@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
+	"sync"
 	"text/template"
 	"time"
 )
@@ -41,6 +45,67 @@ type templateData struct {
 	TimestampISO string
 	Value        float64
 	Fields       map[string]float64
+}
+
+// NewCSVRenderer returns a Renderer that emits comma-separated values.
+// The header row is written once (on the first call) and prepended to that
+// call's output. Subsequent calls return only the data row.
+//
+// Single-field mode columns: device, timestamp, value
+// Multi-field mode columns:  device, timestamp, <field names sorted A-Z>
+//
+// Compatible with --iso-time: when isoTime is true the timestamp column
+// contains an ISO 8601 UTC string instead of a Unix epoch integer.
+func NewCSVRenderer(isoTime bool) Renderer {
+	var once sync.Once
+	var fieldNames []string
+
+	formatTS := func(ts int64) string {
+		if isoTime {
+			return time.Unix(ts, 0).UTC().Format(time.RFC3339)
+		}
+		return strconv.FormatInt(ts, 10)
+	}
+
+	return func(dp DataPoint) ([]byte, error) {
+		var buf bytes.Buffer
+		w := csv.NewWriter(&buf)
+
+		if len(dp.Fields) > 0 {
+			once.Do(func() {
+				fieldNames = make([]string, 0, len(dp.Fields))
+				for k := range dp.Fields {
+					fieldNames = append(fieldNames, k)
+				}
+				sort.Strings(fieldNames)
+				header := append([]string{"device", "timestamp"}, fieldNames...)
+				_ = w.Write(header)
+			})
+			row := make([]string, 0, 2+len(fieldNames))
+			row = append(row, dp.Device, formatTS(dp.Timestamp))
+			for _, name := range fieldNames {
+				row = append(row, strconv.FormatFloat(dp.Fields[name], 'f', -1, 64))
+			}
+			_ = w.Write(row)
+		} else {
+			once.Do(func() {
+				_ = w.Write([]string{"device", "timestamp", "value"})
+			})
+			val := ""
+			if dp.Value != nil {
+				val = strconv.FormatFloat(*dp.Value, 'f', -1, 64)
+			}
+			_ = w.Write([]string{dp.Device, formatTS(dp.Timestamp), val})
+		}
+
+		w.Flush()
+		if err := w.Error(); err != nil {
+			return nil, err
+		}
+		// csv.Writer appends \n after each record; trim the trailing one since
+		// sinks add their own line ending.
+		return bytes.TrimRight(buf.Bytes(), "\n"), nil
+	}
 }
 
 // NewTemplateRenderer returns a Renderer that executes tmpl and validates the
