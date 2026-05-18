@@ -239,8 +239,9 @@ services:
 
   # Single-node Kafka in KRaft mode (no Zookeeper required).
   kafka:
-    image: bitnami/kafka:3.7
+    image: bitnami/kafka:latest
     container_name: genx-kafka
+    profiles: [test-kafka]
     ports:
       - "9092:9092"
     environment:
@@ -260,7 +261,7 @@ services:
   # Console consumer — prints each message as it arrives.
   # Usage: docker compose run --rm kafka-sub
   kafka-sub:
-    image: bitnami/kafka:3.7
+    image: bitnami/kafka:latest
     profiles: [sub, test-kafka]
     depends_on:
       kafka:
