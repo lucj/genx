@@ -90,7 +90,7 @@ Makes it easy to pipe into spreadsheets, InfluxDB line protocol converters, or P
 Write JSON lines to disk, rotating by size or time (`--file-path`, `--file-max-size`).
 Useful for generating fixture datasets and offline testing without running a broker.
 
-### 🟢 Kafka
+### 🟡 Kafka
 `--kafka-brokers`, `--kafka-topic`. The obvious missing broker for larger pipelines.
 Would use `segmentio/kafka-go` to avoid CGO dependency.
 
@@ -104,6 +104,23 @@ Flags always take precedence over config values.
 ### ✅ Authentication
 NATS (`--nats-user`/`--nats-password` or `--nats-token`), MQTT (`--mqtt-user`, `--mqtt-password`),
 webhook (`--webhook-token`).
+
+### ✅ MQTT TLS/mTLS
+`--mqtt-ca-cert` verifies the broker certificate. `--mqtt-cert`/`--mqtt-key` add a client certificate
+for mutual TLS. `--mqtt-tls-insecure` skips broker verification (testing only).
+Per-device client certificates available via `mqtt-device-certs` in the YAML config — each device
+gets its own connection using its own cert/key pair.
+
+### ✅ Sample config generation (`--generate-config`)
+Prints a fully commented YAML template covering every available option, then exits.
+Useful as a starting point: `genx --generate-config > config.yaml`.
+
+### ✅ Config from stdin (`--config -`)
+Passing `-` as the config path reads YAML from stdin.
+Avoids volume mounts when running via Docker: `docker run -i ghcr.io/lucj/genx --config - < config.yaml`.
+
+### ✅ Help on no arguments
+Running `genx` with no flags prints usage and exits instead of silently generating data.
 
 ### ✅ Graceful shutdown
 `SIGINT`/`SIGTERM` (Ctrl+C) cancels a shared `context.Context`; each realtime
