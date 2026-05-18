@@ -89,7 +89,7 @@ func TestRunBatchMultiFieldsPresent(t *testing.T) {
 	}
 	scales := []float64{1.0, 1.0}
 	devices := []string{"sensor-0", "sensor-1"}
-	runBatchMulti(newRand(), fieldFns, scales, 0, 0, 0, sink, devices, time.Now().Unix(), 3, 60)
+	runBatchMulti(newRand(), fieldFns, scales, 0, 0, 0, 0, sink, devices, time.Now().Unix(), 3, 60)
 
 	if len(sink.points) != 6 {
 		t.Fatalf("expected 6 points (2 devices × 3 steps), got %d", len(sink.points))

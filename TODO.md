@@ -27,7 +27,7 @@ Raw sensor data is never a perfect mathematical function.
 `--anomaly-factor` controls the spike/drop magnitude (default 3). Works in single-field, multi-field,
 and fleet mode.
 
-### 🟡 Missing data / dropouts
+### ✅ Missing data / dropouts
 `--dropout-rate <probability>` randomly skips sending a point.
 Simulates connectivity loss or sensor failure; lets consumers prove they handle gaps correctly.
 Pair with anomaly injection for a full fault-simulation mode.
@@ -86,13 +86,14 @@ Makes it easy to pipe into spreadsheets, InfluxDB line protocol converters, or P
 
 ## More sinks
 
-### 🟡 File sink with rotation
-Write JSON lines to disk, rotating by size or time (`--file-path`, `--file-max-size`).
+### ✅ File sink with rotation
+Write JSON lines to disk, rotating by size or time (`--file-path`, `--file-max-size`, `--file-max-age`).
 Useful for generating fixture datasets and offline testing without running a broker.
 
-### 🟡 Kafka
-`--kafka-brokers`, `--kafka-topic`. The obvious missing broker for larger pipelines.
-Would use `segmentio/kafka-go` to avoid CGO dependency.
+### ✅ Kafka
+`--kafka-brokers`, `--kafka-topic`. Uses `segmentio/kafka-go` (no CGO dependency).
+SASL/PLAIN auth via `--kafka-username`/`--kafka-password`; TLS via `--kafka-tls`/`--kafka-tls-insecure`.
+Device name is used as the message key for consistent per-device partitioning.
 
 ---
 

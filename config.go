@@ -20,6 +20,7 @@ type Config struct {
 	Noise         *float64 `yaml:"noise"`
 	AnomalyRate   *float64 `yaml:"anomaly-rate"`
 	AnomalyFactor *float64 `yaml:"anomaly-factor"`
+	DropoutRate   *float64 `yaml:"dropout-rate"`
 	Realtime      *bool    `yaml:"realtime"`
 	Seed       *int64   `yaml:"seed"`
 	ReplayFile string   `yaml:"replay-file"`
@@ -57,6 +58,17 @@ type Config struct {
 	// MqttDeviceCerts maps device name to its own client cert/key pair.
 	// The shared --mqtt-ca-cert still applies to all per-device connections.
 	MqttDeviceCerts map[string]MqttDeviceCert `yaml:"mqtt-device-certs"`
+
+	FilePath    string `yaml:"file-path"`
+	FileMaxSize string `yaml:"file-max-size"`
+	FileMaxAge  string `yaml:"file-max-age"`
+
+	KafkaBrokers     string `yaml:"kafka-brokers"`
+	KafkaTopic       string `yaml:"kafka-topic"`
+	KafkaUsername    string `yaml:"kafka-username"`
+	KafkaPassword    string `yaml:"kafka-password"`
+	KafkaTLS         *bool  `yaml:"kafka-tls"`
+	KafkaTLSInsecure *bool  `yaml:"kafka-tls-insecure"`
 
 	PayloadTemplate     string `yaml:"payload-template"`
 	PayloadTemplateFile string `yaml:"payload-template-file"`

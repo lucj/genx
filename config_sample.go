@@ -18,6 +18,7 @@ spread: 0        # per-device value spread ratio  (0.1 = ±10%)
 noise: 0         # per-sample noise ratio          (0.05 = ±5%)
 anomaly-rate: 0  # probability of injecting a spike or drop per point (0.02 = 2%)
 anomaly-factor: 3 # anomaly magnitude: spike = value × factor, drop = value / factor
+dropout-rate: 0  # probability of skipping a point entirely (0.05 = 5%)
 realtime: false  # emit one point per step using the real wall clock
 seed: 0          # RNG seed for reproducible output (0 = random)
 
@@ -40,7 +41,20 @@ period: 1d
 # ---------------------------------------------------------------------------
 # Output sink
 # ---------------------------------------------------------------------------
-output: stdout   # stdout | webhook | nats | mqtt
+output: stdout   # stdout | webhook | nats | mqtt | file | kafka
+
+# Kafka
+# kafka-brokers: localhost:9092   # comma-separated broker addresses
+# kafka-topic: genx
+# kafka-username: alice
+# kafka-password: secret
+# kafka-tls: false
+# kafka-tls-insecure: false
+
+# File
+# file-path: output.jsonl
+# file-max-size: 10MB   # rotate when file exceeds this size (K/KB/M/MB/G/GB)
+# file-max-age: 1h      # rotate after this duration (d/h/m/s)
 
 # Webhook
 # webhook-url: http://localhost:8080

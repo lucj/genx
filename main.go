@@ -34,6 +34,15 @@ type sinkConfig struct {
 	mqttKey         string
 	mqttTLSInsecure bool
 	mqttDeviceCerts map[string]MqttDeviceCert
+	filePath        string
+	fileMaxBytes    int64
+	fileMaxAge      time.Duration
+	kafkaBrokers    string
+	kafkaTopic      string
+	kafkaUsername   string
+	kafkaPassword   string
+	kafkaTLS        bool
+	kafkaTLSInsecure bool
 	renderer        Renderer
 }
 
@@ -50,8 +59,15 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 		return NewNatsSink(cfg.natsURL, cfg.natsSubject, cfg.natsUser, cfg.natsPassword, cfg.natsToken, cfg.renderer)
 	case "mqtt":
 		return NewMqttSink(cfg.mqttBroker, cfg.mqttTopic, cfg.mqttClientID, cfg.mqttQoS, cfg.mqttUser, cfg.mqttPassword, cfg.mqttCACert, cfg.mqttCert, cfg.mqttKey, cfg.mqttTLSInsecure, cfg.mqttDeviceCerts, cfg.renderer)
+	case "file":
+		if cfg.filePath == "" {
+			return nil, fmt.Errorf("--file-path is required when --output is file")
+		}
+		return NewFileSink(cfg.filePath, cfg.fileMaxBytes, cfg.fileMaxAge, cfg.renderer)
+	case "kafka":
+		return NewKafkaSink(cfg.kafkaBrokers, cfg.kafkaTopic, cfg.kafkaUsername, cfg.kafkaPassword, cfg.kafkaTLS, cfg.kafkaTLSInsecure, cfg.renderer)
 	default:
-		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt)", cfg.output)
+		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka)", cfg.output)
 	}
 }
 
@@ -68,6 +84,7 @@ func main() {
 		noise       float64
 		anomalyRate   float64
 		anomalyFactor float64
+		dropoutRate   float64
 		realtime    bool
 		seed        int64
 		replayFile  string
@@ -119,6 +136,19 @@ func main() {
 		mqttCert        string
 		mqttKey         string
 		mqttTLSInsecure bool
+
+		// File
+		filePath    string
+		fileMaxSize string
+		fileMaxAge  string
+
+		// Kafka
+		kafkaBrokers     string
+		kafkaTopic       string
+		kafkaUsername    string
+		kafkaPassword    string
+		kafkaTLS         bool
+		kafkaTLSInsecure bool
 	)
 
 	var mqttDeviceCerts map[string]MqttDeviceCert
@@ -160,6 +190,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.Noise != nil && !changed("noise")                   { noise = *cfg.Noise }
 				if cfg.AnomalyRate != nil && !changed("anomaly-rate")      { anomalyRate = *cfg.AnomalyRate }
 				if cfg.AnomalyFactor != nil && !changed("anomaly-factor")  { anomalyFactor = *cfg.AnomalyFactor }
+				if cfg.DropoutRate != nil && !changed("dropout-rate")      { dropoutRate = *cfg.DropoutRate }
 				if cfg.Realtime != nil && !changed("realtime")             { realtime = *cfg.Realtime }
 				if cfg.Seed != nil && !changed("seed")                     { seed = *cfg.Seed }
 				if cfg.ReplayFile != "" && !changed("replay-file")         { replayFile = cfg.ReplayFile }
@@ -194,6 +225,15 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.MqttKey != "" && !changed("mqtt-key")               { mqttKey = cfg.MqttKey }
 				if cfg.MqttTLSInsecure != nil && !changed("mqtt-tls-insecure") { mqttTLSInsecure = *cfg.MqttTLSInsecure }
 				mqttDeviceCerts = cfg.MqttDeviceCerts
+				if cfg.FilePath != "" && !changed("file-path")           { filePath = cfg.FilePath }
+				if cfg.FileMaxSize != "" && !changed("file-max-size")    { fileMaxSize = cfg.FileMaxSize }
+				if cfg.FileMaxAge != "" && !changed("file-max-age")      { fileMaxAge = cfg.FileMaxAge }
+				if cfg.KafkaBrokers != "" && !changed("kafka-brokers")         { kafkaBrokers = cfg.KafkaBrokers }
+				if cfg.KafkaTopic != "" && !changed("kafka-topic")             { kafkaTopic = cfg.KafkaTopic }
+				if cfg.KafkaUsername != "" && !changed("kafka-username")       { kafkaUsername = cfg.KafkaUsername }
+				if cfg.KafkaPassword != "" && !changed("kafka-password")       { kafkaPassword = cfg.KafkaPassword }
+				if cfg.KafkaTLS != nil && !changed("kafka-tls")                { kafkaTLS = *cfg.KafkaTLS }
+				if cfg.KafkaTLSInsecure != nil && !changed("kafka-tls-insecure") { kafkaTLSInsecure = *cfg.KafkaTLSInsecure }
 				if cfg.PayloadTemplate != "" && !changed("payload-template")          { payloadTemplate = cfg.PayloadTemplate }
 				if cfg.PayloadTemplateFile != "" && !changed("payload-template-file") { payloadTemplateFile = cfg.PayloadTemplateFile }
 			}
@@ -207,6 +247,10 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					output = "nats"
 				case cmd.Flags().Changed("mqtt-broker"):
 					output = "mqtt"
+				case cmd.Flags().Changed("file-path"):
+					output = "file"
+				case cmd.Flags().Changed("kafka-brokers"):
+					output = "kafka"
 				}
 			}
 
@@ -239,6 +283,24 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				rng = seededRand(uint64(seed))
 			}
 
+			// Parse file sink rotation parameters.
+			var fileMaxBytes int64
+			if fileMaxSize != "" {
+				var parseErr error
+				fileMaxBytes, parseErr = ParseSize(fileMaxSize)
+				if parseErr != nil {
+					return fmt.Errorf("invalid --file-max-size: %w", parseErr)
+				}
+			}
+			var fileMaxAgeDur time.Duration
+			if fileMaxAge != "" {
+				ageSecs, err := GetSeconds(fileMaxAge)
+				if err != nil {
+					return fmt.Errorf("invalid --file-max-age: %w", err)
+				}
+				fileMaxAgeDur = time.Duration(ageSecs) * time.Second
+			}
+
 			// Build the output sink.
 			sink, err := buildSink(sinkConfig{
 				output:          output,
@@ -260,6 +322,15 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				mqttKey:         mqttKey,
 				mqttTLSInsecure: mqttTLSInsecure,
 				mqttDeviceCerts: mqttDeviceCerts,
+				filePath:        filePath,
+				fileMaxBytes:    fileMaxBytes,
+				fileMaxAge:      fileMaxAgeDur,
+				kafkaBrokers:    kafkaBrokers,
+				kafkaTopic:      kafkaTopic,
+				kafkaUsername:   kafkaUsername,
+				kafkaPassword:   kafkaPassword,
+				kafkaTLS:        kafkaTLS,
+				kafkaTLSInsecure: kafkaTLSInsecure,
 				renderer:        renderer,
 			})
 			if err != nil {
@@ -327,9 +398,9 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					}
 				}
 				if realtime {
-					runRealtimeMulti(ctx, rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, sink, deviceNames, itemCount, stepSeconds)
+					runRealtimeMulti(ctx, rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, dropoutRate, sink, deviceNames, itemCount, stepSeconds)
 				} else {
-					runBatchMulti(rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, sink, deviceNames, start, itemCount, stepSeconds)
+					runBatchMulti(rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, dropoutRate, sink, deviceNames, start, itemCount, stepSeconds)
 				}
 				return nil
 			}
@@ -370,9 +441,9 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}
 			if realtime {
-				runRealtime(ctx, fns, sink, deviceNames, itemCount, stepSeconds)
+				runRealtime(ctx, rng, fns, sink, deviceNames, itemCount, stepSeconds, dropoutRate)
 			} else {
-				runBatch(fns, sink, deviceNames, start, itemCount, stepSeconds)
+				runBatch(rng, fns, sink, deviceNames, start, itemCount, stepSeconds, dropoutRate)
 			}
 			return nil
 		},
@@ -392,6 +463,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.Float64Var(&noise, "noise", 0.0, "random noise per sample as a ratio, e.g. 0.05 = ±5%")
 	f.Float64Var(&anomalyRate, "anomaly-rate", 0.0, "probability of injecting an anomaly per point, e.g. 0.02 = 2%")
 	f.Float64Var(&anomalyFactor, "anomaly-factor", 3.0, "anomaly magnitude: spike = value × factor, drop = value / factor")
+	f.Float64Var(&dropoutRate, "dropout-rate", 0.0, "probability of skipping a point, e.g. 0.05 = 5% dropout")
 	f.BoolVar(&realtime, "realtime", false, "emit one point per step interval using wall-clock time")
 	f.Int64Var(&seed, "seed", 0, "random seed for reproducible output (0 = random); batch mode only")
 	f.StringVar(&replayFile, "replay-file", "", "replay a JSON-lines file through the configured sink")
@@ -441,12 +513,25 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.StringVar(&mqttKey, "mqtt-key", "", "client private key for mTLS authentication")
 	f.BoolVar(&mqttTLSInsecure, "mqtt-tls-insecure", false, "skip broker TLS certificate verification (testing only)")
 
+	// File
+	f.StringVar(&filePath, "file-path", "", "base path for file sink output (e.g. data.jsonl)")
+	f.StringVar(&fileMaxSize, "file-max-size", "", "rotate file when it reaches this size (e.g. 10MB, 1GB)")
+	f.StringVar(&fileMaxAge, "file-max-age", "", "rotate file after this duration (e.g. 1h, 30m)")
+
+	// Kafka
+	f.StringVar(&kafkaBrokers, "kafka-brokers", "localhost:9092", "comma-separated Kafka broker addresses")
+	f.StringVar(&kafkaTopic, "kafka-topic", "genx", "Kafka topic to publish to")
+	f.StringVar(&kafkaUsername, "kafka-username", "", "SASL/PLAIN username")
+	f.StringVar(&kafkaPassword, "kafka-password", "", "SASL/PLAIN password")
+	f.BoolVar(&kafkaTLS, "kafka-tls", false, "enable TLS (uses system cert pool)")
+	f.BoolVar(&kafkaTLSInsecure, "kafka-tls-insecure", false, "skip broker TLS certificate verification (testing only)")
+
 	// Annotate flags with groups for the help output.
 	groups := []struct {
 		name  string
 		flags []string
 	}{
-		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "realtime", "seed", "replay-file", "noise", "spread", "anomaly-rate", "anomaly-factor"}},
+		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "realtime", "seed", "replay-file", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
 		{"Cosine curve (--type cos)", []string{"min", "max", "period"}},
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
@@ -455,6 +540,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},
 		{"NATS (--output nats)", []string{"nats-url", "nats-subject", "nats-user", "nats-password", "nats-token"}},
 		{"MQTT (--output mqtt)", []string{"mqtt-broker", "mqtt-topic", "mqtt-qos", "mqtt-client-id", "mqtt-user", "mqtt-password", "mqtt-ca-cert", "mqtt-cert", "mqtt-key", "mqtt-tls-insecure"}},
+		{"File (--output file)", []string{"file-path", "file-max-size", "file-max-age"}},
+		{"Kafka (--output kafka)", []string{"kafka-brokers", "kafka-topic", "kafka-username", "kafka-password", "kafka-tls", "kafka-tls-insecure"}},
 	}
 
 	for _, g := range groups {
