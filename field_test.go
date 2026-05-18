@@ -64,6 +64,40 @@ func TestBuildFieldFnWalk(t *testing.T) {
 	}
 }
 
+func TestBuildFieldFnSawtooth(t *testing.T) {
+	min, max := 0.0, 100.0
+	fc := FieldConfig{Type: "sawtooth", Min: &min, Max: &max}
+	start := int64(0)
+	fn, err := buildFieldFn(newRand(), fc, start, 100)
+	if err != nil {
+		t.Fatalf("buildFieldFn error: %v", err)
+	}
+	// At t=0 (phase 0) value should be min.
+	if got := fn(0); got < -1e-9 || got > 1e-9 {
+		t.Errorf("at start: got %f, want ~0", got)
+	}
+	// At midpoint value should be ~50.
+	if got := fn(50); got < 49 || got > 51 {
+		t.Errorf("at midpoint: got %f, want ~50", got)
+	}
+}
+
+func TestBuildFieldFnSquare(t *testing.T) {
+	min, max := 0.0, 1.0
+	dc := 0.5
+	fc := FieldConfig{Type: "square", Min: &min, Max: &max, DutyCycle: &dc}
+	fn, err := buildFieldFn(newRand(), fc, 0, 10)
+	if err != nil {
+		t.Fatalf("buildFieldFn error: %v", err)
+	}
+	if got := fn(0); got != 1 {
+		t.Errorf("at phase 0: expected high (1), got %f", got)
+	}
+	if got := fn(7); got != 0 {
+		t.Errorf("at phase 0.7: expected low (0), got %f", got)
+	}
+}
+
 func TestBuildFieldFnUnknownType(t *testing.T) {
 	fc := FieldConfig{Type: "unknown"}
 	_, err := buildFieldFn(newRand(), fc, time.Now().Unix(), 3600)

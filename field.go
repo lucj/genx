@@ -17,6 +17,8 @@ type FieldConfig struct {
 	WalkStart *float64 `yaml:"walk-start"`
 	WalkStep  *float64 `yaml:"walk-step"`
 	WalkBias  *float64 `yaml:"walk-bias"`
+	// Square-wave parameter
+	DutyCycle *float64 `yaml:"duty-cycle"`
 }
 
 // buildFieldFn constructs a curve function from a FieldConfig.
@@ -55,6 +57,46 @@ func buildFieldFn(rng *rand.Rand, fc FieldConfig, start int64, durationSeconds i
 		return GetLog(start), nil
 	case "exp":
 		return GetExp(start, durationSeconds), nil
+	case "sawtooth":
+		min := 0.0
+		if fc.Min != nil {
+			min = *fc.Min
+		}
+		max := 1.0
+		if fc.Max != nil {
+			max = *fc.Max
+		}
+		period := durationSeconds
+		if fc.Period != "" {
+			var err error
+			period, err = GetSeconds(fc.Period)
+			if err != nil {
+				return nil, fmt.Errorf("invalid period: %w", err)
+			}
+		}
+		return GetSawtooth(min, max, start, period), nil
+	case "square":
+		min := 0.0
+		if fc.Min != nil {
+			min = *fc.Min
+		}
+		max := 1.0
+		if fc.Max != nil {
+			max = *fc.Max
+		}
+		period := durationSeconds
+		if fc.Period != "" {
+			var err error
+			period, err = GetSeconds(fc.Period)
+			if err != nil {
+				return nil, fmt.Errorf("invalid period: %w", err)
+			}
+		}
+		dutyCycle := 0.5
+		if fc.DutyCycle != nil {
+			dutyCycle = *fc.DutyCycle
+		}
+		return GetSquare(min, max, start, period, dutyCycle), nil
 	case "walk":
 		walkStart := 100.0
 		if fc.WalkStart != nil {
@@ -77,6 +119,6 @@ func buildFieldFn(rng *rand.Rand, fc FieldConfig, start int64, durationSeconds i
 		}
 		return GetRandomWalk(rng, walkStart, step, bias, wmin, wmax), nil
 	default:
-		return nil, fmt.Errorf("unknown type %q (use cos, linear, log, exp, walk)", fc.Type)
+		return nil, fmt.Errorf("unknown type %q (use cos, linear, log, exp, walk, sawtooth, square)", fc.Type)
 	}
 }

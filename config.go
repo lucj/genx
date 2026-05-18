@@ -25,11 +25,12 @@ type Config struct {
 	Seed       *int64   `yaml:"seed"`
 	ReplayFile string   `yaml:"replay-file"`
 
-	First  *float64 `yaml:"first"`
-	Last   *float64 `yaml:"last"`
-	Min    *float64 `yaml:"min"`
-	Max    *float64 `yaml:"max"`
-	Period string   `yaml:"period"`
+	First     *float64 `yaml:"first"`
+	Last      *float64 `yaml:"last"`
+	Min       *float64 `yaml:"min"`
+	Max       *float64 `yaml:"max"`
+	Period    string   `yaml:"period"`
+	DutyCycle *float64 `yaml:"duty-cycle"`
 	// Walk-specific
 	WalkStart *float64 `yaml:"walk-start"`
 	WalkStep  *float64 `yaml:"walk-step"`

@@ -90,10 +90,11 @@ func main() {
 		replayFile  string
 		generateConfig bool
 
-		// Cosine
+		// Periodic curves (cos, sawtooth, square)
 		cosMin    float64
 		cosMax    float64
 		cosPeriod string
+		dutyCycle float64
 
 		// Linear
 		linearFirst float64
@@ -201,6 +202,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.Min != nil && !changed("min")                       { cosMin = *cfg.Min }
 				if cfg.Max != nil && !changed("max")                       { cosMax = *cfg.Max }
 				if cfg.Period != "" && !changed("period")                  { cosPeriod = cfg.Period }
+				if cfg.DutyCycle != nil && !changed("duty-cycle")          { dutyCycle = *cfg.DutyCycle }
 				if cfg.WalkStart != nil && !changed("walk-start")          { walkStart = *cfg.WalkStart }
 				if cfg.WalkStep != nil && !changed("walk-step")            { walkStep = *cfg.WalkStep }
 				if cfg.WalkBias != nil && !changed("walk-bias")            { walkBias = *cfg.WalkBias }
@@ -426,6 +428,21 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					return fmt.Errorf("invalid --period: %w", err)
 				}
 				baseFn = GetCosinus(cosMin, cosMax, periodSeconds)
+			case "sawtooth":
+				periodSeconds, err := GetSeconds(cosPeriod)
+				if err != nil {
+					return fmt.Errorf("invalid --period: %w", err)
+				}
+				baseFn = GetSawtooth(cosMin, cosMax, start, periodSeconds)
+			case "square":
+				periodSeconds, err := GetSeconds(cosPeriod)
+				if err != nil {
+					return fmt.Errorf("invalid --period: %w", err)
+				}
+				if dutyCycle <= 0 || dutyCycle >= 1 {
+					return fmt.Errorf("--duty-cycle must be between 0 and 1 (exclusive), got %g", dutyCycle)
+				}
+				baseFn = GetSquare(cosMin, cosMax, start, periodSeconds, dutyCycle)
 			case "log":
 				baseFn = GetLog(start)
 			case "exp":
@@ -433,7 +450,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 			case "walk":
 				// baseFn intentionally left nil; each device gets its own closure below.
 			default:
-				return fmt.Errorf("unknown curve type %q (use cos, linear, log, exp, walk)", curveType)
+				return fmt.Errorf("unknown curve type %q (use cos, linear, log, exp, walk, sawtooth, square)", curveType)
 			}
 
 			fns := make([]func(float64) float64, devices)
@@ -464,7 +481,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	// General
 	f.StringVar(&configFile, "config", "", "path to YAML config file (CLI flags take precedence)")
 	f.BoolVar(&generateConfig, "generate-config", false, "print a sample YAML config file and exit")
-	f.StringVar(&curveType, "type", "walk", "curve type: cos, linear, log, exp, walk")
+	f.StringVar(&curveType, "type", "walk", "curve type: cos, linear, log, exp, walk, sawtooth, square")
 	f.StringVar(&duration, "duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
 	f.StringVar(&step, "step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
 	f.StringVar(&device, "device", "device", "device/sensor name (or prefix when --devices > 1)")
@@ -478,10 +495,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.Int64Var(&seed, "seed", 0, "random seed for reproducible output (0 = random); batch mode only")
 	f.StringVar(&replayFile, "replay-file", "", "replay a JSON-lines file through the configured sink")
 
-	// Cosine
-	f.Float64Var(&cosMin, "min", 10, "minimum value (cos)")
-	f.Float64Var(&cosMax, "max", 25, "maximum value (cos)")
-	f.StringVar(&cosPeriod, "period", "1d", "oscillation period (cos), e.g. 1d, 12h")
+	// Periodic curves
+	f.Float64Var(&cosMin, "min", 10, "minimum value (cos, sawtooth, square)")
+	f.Float64Var(&cosMax, "max", 25, "maximum value (cos, sawtooth, square)")
+	f.StringVar(&cosPeriod, "period", "1d", "period (cos, sawtooth, square), e.g. 1d, 12h")
+	f.Float64Var(&dutyCycle, "duty-cycle", 0.5, "fraction of period in high state, e.g. 0.3 = 30% on (square)")
 
 	// Linear
 	f.Float64Var(&linearFirst, "first", 0, "starting value (linear)")
@@ -543,7 +561,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		flags []string
 	}{
 		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "realtime", "seed", "replay-file", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
-		{"Cosine curve (--type cos)", []string{"min", "max", "period"}},
+		{"Periodic curves (--type cos / sawtooth / square)", []string{"min", "max", "period", "duty-cycle"}},
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
 		{"Output", []string{"output", "format", "iso-time"}},

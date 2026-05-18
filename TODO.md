@@ -59,9 +59,11 @@ make it more authentic than smooth curves for battery drain, temperature drift, 
 Flags: `--walk-start`, `--walk-step`, `--walk-bias`, `--walk-min`, `--walk-max`.
 Fleet mode: each device gets its own independent walk; spread varies the starting value.
 
-### 🟢 Sawtooth / square wave
-Useful for simulating on/off equipment cycles (pumps, valves, HVAC units).
-`--type sawtooth` and `--type square` with a `--duty-cycle` for square waves.
+### ✅ Sawtooth / square wave
+`--type sawtooth` ramps linearly from `--min` to `--max` over each `--period`, then resets.
+`--type square` alternates between `--max` (high) and `--min` (low); `--duty-cycle` sets the
+fraction of the period spent in the high state (default 0.5). Both share `--min`, `--max`, `--period`
+with the cosine curve. Useful for simulating on/off equipment cycles (pumps, valves, HVAC units).
 
 ---
 

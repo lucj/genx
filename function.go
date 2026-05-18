@@ -41,6 +41,39 @@ func GetExp(start int64, durationSeconds int) func(float64) float64 {
 	}
 }
 
+// GetSawtooth returns a function that ramps linearly from min to max over one
+// period, then resets — producing a /|/|/| waveform. Phase is anchored to
+// start so the wave always begins at min at the start of the run.
+func GetSawtooth(min, max float64, start int64, periodSeconds int) func(float64) float64 {
+	period := float64(periodSeconds)
+	startF := float64(start)
+	return func(x float64) float64 {
+		phase := math.Mod(x-startF, period) / period
+		if phase < 0 {
+			phase += 1
+		}
+		return min + (max-min)*phase
+	}
+}
+
+// GetSquare returns a function that outputs max during the high portion of each
+// period (phase < dutyCycle) and min during the low portion. dutyCycle must be
+// in (0, 1); 0.5 gives a symmetric on/off wave.
+func GetSquare(min, max float64, start int64, periodSeconds int, dutyCycle float64) func(float64) float64 {
+	period := float64(periodSeconds)
+	startF := float64(start)
+	return func(x float64) float64 {
+		phase := math.Mod(x-startF, period) / period
+		if phase < 0 {
+			phase += 1
+		}
+		if phase < dutyCycle {
+			return max
+		}
+		return min
+	}
+}
+
 // GetRandomWalk returns a stateful closure that drifts by a random delta each call.
 // stepSize controls the magnitude, bias adds a fixed directional drift per call
 // (negative = downward), and min/max clamp the output when max > min.

@@ -189,6 +189,92 @@ func TestWithAnomalyProducesOutliers(t *testing.T) {
 	}
 }
 
+func TestGetSawtoothRamps(t *testing.T) {
+	start := int64(0)
+	period := 100
+	fn := GetSawtooth(0, 100, start, period)
+
+	// At phase 0, value should be min.
+	if got := fn(0); math.Abs(got) > 1e-9 {
+		t.Errorf("at phase 0: got %f, want 0", got)
+	}
+	// Midpoint of period → ~50.
+	if got := fn(50); math.Abs(got-50) > 1e-9 {
+		t.Errorf("at midpoint: got %f, want 50", got)
+	}
+	// Value should be strictly increasing within a period.
+	prev := fn(0)
+	for i := 1; i < period; i++ {
+		v := fn(float64(i))
+		if v <= prev {
+			t.Errorf("sawtooth should be increasing within period: step %d v=%f prev=%f", i, v, prev)
+		}
+		prev = v
+	}
+}
+
+func TestGetSawtoothResets(t *testing.T) {
+	fn := GetSawtooth(0, 100, 0, 10)
+	// One full period later the value should reset near min.
+	if got := fn(10); math.Abs(got) > 1e-9 {
+		t.Errorf("at period boundary: got %f, want 0 (reset)", got)
+	}
+}
+
+func TestGetSawtoothStaysInRange(t *testing.T) {
+	fn := GetSawtooth(5, 15, 0, 60)
+	for i := 0; i < 300; i++ {
+		v := fn(float64(i))
+		if v < 5-1e-9 || v > 15+1e-9 {
+			t.Errorf("value %f out of range [5, 15] at t=%d", v, i)
+		}
+	}
+}
+
+func TestGetSquareHighLow(t *testing.T) {
+	fn := GetSquare(0, 1, 0, 10, 0.5)
+
+	// First half of period → high (max).
+	for i := 0; i < 5; i++ {
+		if got := fn(float64(i)); got != 1 {
+			t.Errorf("t=%d: expected high (1), got %f", i, got)
+		}
+	}
+	// Second half → low (min).
+	for i := 5; i < 10; i++ {
+		if got := fn(float64(i)); got != 0 {
+			t.Errorf("t=%d: expected low (0), got %f", i, got)
+		}
+	}
+}
+
+func TestGetSquareDutyCycle(t *testing.T) {
+	// 30% duty cycle: high for first 3 of every 10 seconds.
+	fn := GetSquare(0, 100, 0, 10, 0.3)
+	for i := 0; i < 3; i++ {
+		if got := fn(float64(i)); got != 100 {
+			t.Errorf("t=%d (duty zone): expected 100, got %f", i, got)
+		}
+	}
+	for i := 3; i < 10; i++ {
+		if got := fn(float64(i)); got != 0 {
+			t.Errorf("t=%d (off zone): expected 0, got %f", i, got)
+		}
+	}
+}
+
+func TestGetSquareRepeats(t *testing.T) {
+	fn := GetSquare(0, 1, 0, 10, 0.5)
+	// Values at t and t+period should be identical.
+	for i := 0; i < 10; i++ {
+		v1 := fn(float64(i))
+		v2 := fn(float64(i + 10))
+		if v1 != v2 {
+			t.Errorf("t=%d: value %f ≠ value at t+period %f", i, v1, v2)
+		}
+	}
+}
+
 func TestGetExp(t *testing.T) {
 	start := time.Now().Unix()
 	duration := 3600

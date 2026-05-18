@@ -9,7 +9,7 @@ const sampleConfig = `# genx sample configuration
 # ---------------------------------------------------------------------------
 # Curve
 # ---------------------------------------------------------------------------
-type: cos        # cos | linear | log | exp | walk
+type: cos        # cos | linear | log | exp | walk | sawtooth | square
 duration: 1h     # total duration  — units: d, h, m, s  (e.g. 2d, 30m)
 step: 1m         # sampling interval
 device: sensor   # device name, or prefix when devices > 1
@@ -22,10 +22,11 @@ dropout-rate: 0  # probability of skipping a point entirely (0.05 = 5%)
 realtime: false  # emit one point per step using the real wall clock
 seed: 0          # RNG seed for reproducible output (0 = random)
 
-# Cosine parameters (type: cos)
+# Cosine / sawtooth / square parameters
 min: 10
 max: 25
 period: 1d
+# duty-cycle: 0.5  # fraction of period in high state (square wave only)
 
 # Linear parameters (type: linear)
 # first: 0
