@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"syscall"
 	"text/template"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 // sinkConfig carries the resolved parameters needed to construct a Sink.
@@ -55,328 +56,439 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 }
 
 func main() {
-	// Config file flag
-	configPtr := flag.String("config", "", "path to YAML config file (CLI flags take precedence)")
+	var (
+		// General
+		configFile  string
+		curveType   string
+		duration    string
+		step        string
+		device      string
+		devices     int
+		spread      float64
+		noise       float64
+		anomalyRate   float64
+		anomalyFactor float64
+		realtime    bool
+		seed        int64
+		replayFile  string
+		generateConfig bool
 
-	// Curve flags
-	typePtr := flag.String("type", "walk", "type of curve: cos, linear, log, exp, walk")
-	durationPtr := flag.String("duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
-	stepPtr := flag.String("step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
-	devicePtr := flag.String("device", "device", "device/sensor name (or prefix when --devices > 1)")
-	devicesPtr := flag.Int("devices", 1, "number of devices to simulate simultaneously")
-	spreadPtr := flag.Float64("spread", 0.0, "per-device value spread as a ratio, e.g. 0.1 = ±10%")
-	noisePtr := flag.Float64("noise", 0.0, "random noise added to every sample as a ratio, e.g. 0.05 = ±5%")
-	anomalyRatePtr   := flag.Float64("anomaly-rate", 0.0, "probability of injecting an anomaly per point, e.g. 0.02 = 2%")
-	anomalyFactorPtr := flag.Float64("anomaly-factor", 3.0, "anomaly magnitude multiplier: spike = value × factor, drop = value / factor")
-	realtimePtr := flag.Bool("realtime", false, "real-time mode: emit one point per step interval")
-	seedPtr := flag.Int64("seed", 0, "random seed for reproducible output (0 = random); batch mode only")
+		// Cosine
+		cosMin    float64
+		cosMax    float64
+		cosPeriod string
 
-	// Replay flag
-	replayFilePtr := flag.String("replay-file", "", "path to a JSON-lines file to replay through the configured sink")
+		// Linear
+		linearFirst float64
+		linearLast  float64
 
-	// Linear curve flags
-	linearFirst := flag.Float64("first", 0, "first value (linear)")
-	linearLast := flag.Float64("last", 1, "last value (linear)")
+		// Walk
+		walkStart float64
+		walkStep  float64
+		walkBias  float64
+		walkMin   float64
+		walkMax   float64
 
-	// Cosine curve flags
-	cosMin := flag.Float64("min", 10, "minimum value (cos)")
-	cosMax := flag.Float64("max", 25, "maximum value (cos)")
-	cosPeriod := flag.String("period", "1d", "period (cos), e.g. 1d, 12h")
+		// Output
+		output  string
+		isoTime bool
 
-	// Random walk flags
-	walkStart := flag.Float64("walk-start", 20.0, "starting value (walk)")
-	walkStep := flag.Float64("walk-step", 0.5, "max delta magnitude per sample (walk)")
-	walkBias := flag.Float64("walk-bias", 0.0, "per-step directional drift (walk); negative = downward")
-	walkMin := flag.Float64("walk-min", 15.0, "lower clamp bound (walk); clamping disabled when walk-min == walk-max")
-	walkMax := flag.Float64("walk-max", 35.0, "upper clamp bound (walk); clamping disabled when walk-min == walk-max")
+		// Payload template
+		payloadTemplate     string
+		payloadTemplateFile string
 
-	// Output sink flags
-	outputPtr := flag.String("output", "stdout", "output backend: stdout, webhook, nats, mqtt")
-	isoTimePtr := flag.Bool("iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
+		// Webhook
+		webhookURL   string
+		webhookToken string
 
-	// Webhook flags
-	webhookURL := flag.String("webhook-url", "", "webhook URL (required for --output webhook)")
-	webhookToken := flag.String("webhook-token", "", "bearer token for webhook Authorization header")
+		// NATS
+		natsURL      string
+		natsSubject  string
+		natsUser     string
+		natsPassword string
+		natsToken    string
 
-	// NATS flags
-	natsURL := flag.String("nats-url", "nats://localhost:4222", "NATS server URL")
-	natsSubject := flag.String("nats-subject", "genx", "NATS subject to publish to")
-	natsUser := flag.String("nats-user", "", "NATS username")
-	natsPassword := flag.String("nats-password", "", "NATS password")
-	natsToken := flag.String("nats-token", "", "NATS token (used when --nats-user is not set)")
+		// MQTT
+		mqttBroker      string
+		mqttTopic       string
+		mqttQoS         int
+		mqttClientID    string
+		mqttUser        string
+		mqttPassword    string
+		mqttCACert      string
+		mqttCert        string
+		mqttKey         string
+		mqttTLSInsecure bool
+	)
 
-	// MQTT flags
-	mqttBroker := flag.String("mqtt-broker", "tcp://localhost:1883", "MQTT broker URL")
-	mqttTopic := flag.String("mqtt-topic", "genx", "MQTT topic to publish to")
-	mqttQoS := flag.Int("mqtt-qos", 0, "MQTT QoS level (0, 1, or 2)")
-	mqttClientID := flag.String("mqtt-client-id", fmt.Sprintf("genx-%d", os.Getpid()), "MQTT client ID")
-	mqttUser := flag.String("mqtt-user", "", "MQTT username")
-	mqttPassword := flag.String("mqtt-password", "", "MQTT password")
-	mqttCACert := flag.String("mqtt-ca-cert", "", "path to CA certificate file for verifying the broker's TLS certificate")
-	mqttCert := flag.String("mqtt-cert", "", "path to client certificate file for mTLS authentication")
-	mqttKey := flag.String("mqtt-key", "", "path to client private key file for mTLS authentication")
-	mqttTLSInsecure := flag.Bool("mqtt-tls-insecure", false, "skip broker TLS certificate verification (use only for testing)")
 	var mqttDeviceCerts map[string]MqttDeviceCert
 
-	// Payload template flags
-	payloadTemplateStr := flag.String("payload-template", "", "Go text/template string for JSON payload")
-	payloadTemplateFile := flag.String("payload-template-file", "", "path to a Go text/template file for JSON payload")
+	rootCmd := &cobra.Command{
+		Use:   "genx",
+		Short: "IoT device simulator — generates synthetic time-series data",
+		Long: `genx emits synthetic measurements as JSON to test IoT pipelines, dashboards, and alerting systems.
 
-	// Utility flags
-	generateConfig := flag.Bool("generate-config", false, "print a sample YAML config file and exit")
+Use --config to load a YAML config file; CLI flags override any config value.`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().NFlag() == 0 {
+				return cmd.Help()
+			}
 
-	flag.Parse()
+			if generateConfig {
+				printSampleConfig()
+				return nil
+			}
 
-	if len(os.Args) == 1 {
-		flag.Usage()
-		os.Exit(0)
-	}
+			// Load config and apply values for flags not explicitly set on the CLI.
+			var cfg *Config
+			if configFile != "" {
+				c, err := LoadConfig(configFile)
+				if err != nil {
+					return fmt.Errorf("failed to load config: %w", err)
+				}
+				cfg = c
 
-	if *generateConfig {
-		printSampleConfig()
-		return
-	}
+				changed := cmd.Flags().Changed
 
-	// Load config and apply values for flags not explicitly set on the CLI.
-	set := map[string]bool{}
-	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+				if cfg.Type != "" && !changed("type")                      { curveType = cfg.Type }
+				if cfg.Duration != "" && !changed("duration")              { duration = cfg.Duration }
+				if cfg.Step != "" && !changed("step")                      { step = cfg.Step }
+				if cfg.Device != "" && !changed("device")                  { device = cfg.Device }
+				if cfg.Devices != nil && !changed("devices")               { devices = *cfg.Devices }
+				if cfg.Spread != nil && !changed("spread")                 { spread = *cfg.Spread }
+				if cfg.Noise != nil && !changed("noise")                   { noise = *cfg.Noise }
+				if cfg.AnomalyRate != nil && !changed("anomaly-rate")      { anomalyRate = *cfg.AnomalyRate }
+				if cfg.AnomalyFactor != nil && !changed("anomaly-factor")  { anomalyFactor = *cfg.AnomalyFactor }
+				if cfg.Realtime != nil && !changed("realtime")             { realtime = *cfg.Realtime }
+				if cfg.Seed != nil && !changed("seed")                     { seed = *cfg.Seed }
+				if cfg.ReplayFile != "" && !changed("replay-file")         { replayFile = cfg.ReplayFile }
 
-	var cfg *Config
-	if *configPtr != "" {
-		c, err := LoadConfig(*configPtr)
-		if err != nil {
-			log.Fatalf("failed to load config: %v", err)
-		}
-		cfg = c
+				if cfg.First != nil && !changed("first")                   { linearFirst = *cfg.First }
+				if cfg.Last != nil && !changed("last")                     { linearLast = *cfg.Last }
+				if cfg.Min != nil && !changed("min")                       { cosMin = *cfg.Min }
+				if cfg.Max != nil && !changed("max")                       { cosMax = *cfg.Max }
+				if cfg.Period != "" && !changed("period")                  { cosPeriod = cfg.Period }
+				if cfg.WalkStart != nil && !changed("walk-start")          { walkStart = *cfg.WalkStart }
+				if cfg.WalkStep != nil && !changed("walk-step")            { walkStep = *cfg.WalkStep }
+				if cfg.WalkBias != nil && !changed("walk-bias")            { walkBias = *cfg.WalkBias }
+				if cfg.WalkMin != nil && !changed("walk-min")              { walkMin = *cfg.WalkMin }
+				if cfg.WalkMax != nil && !changed("walk-max")              { walkMax = *cfg.WalkMax }
 
-		if cfg.Type != "" && !set["type"]                      { *typePtr = cfg.Type }
-		if cfg.Duration != "" && !set["duration"]              { *durationPtr = cfg.Duration }
-		if cfg.Step != "" && !set["step"]                      { *stepPtr = cfg.Step }
-		if cfg.Device != "" && !set["device"]                  { *devicePtr = cfg.Device }
-		if cfg.Devices != nil && !set["devices"]               { *devicesPtr = *cfg.Devices }
-		if cfg.Spread != nil && !set["spread"]                 { *spreadPtr = *cfg.Spread }
-		if cfg.Noise != nil && !set["noise"]                         { *noisePtr = *cfg.Noise }
-		if cfg.AnomalyRate != nil && !set["anomaly-rate"]             { *anomalyRatePtr = *cfg.AnomalyRate }
-		if cfg.AnomalyFactor != nil && !set["anomaly-factor"]         { *anomalyFactorPtr = *cfg.AnomalyFactor }
-		if cfg.Realtime != nil && !set["realtime"]                    { *realtimePtr = *cfg.Realtime }
-		if cfg.Seed != nil && !set["seed"]                     { *seedPtr = *cfg.Seed }
-		if cfg.ReplayFile != "" && !set["replay-file"]         { *replayFilePtr = cfg.ReplayFile }
+				if cfg.Output != "" && !changed("output")                  { output = cfg.Output }
+				if cfg.WebhookURL != "" && !changed("webhook-url")         { webhookURL = cfg.WebhookURL }
+				if cfg.WebhookToken != "" && !changed("webhook-token")     { webhookToken = cfg.WebhookToken }
+				if cfg.NatsURL != "" && !changed("nats-url")               { natsURL = cfg.NatsURL }
+				if cfg.NatsSubject != "" && !changed("nats-subject")       { natsSubject = cfg.NatsSubject }
+				if cfg.NatsUser != "" && !changed("nats-user")             { natsUser = cfg.NatsUser }
+				if cfg.NatsPassword != "" && !changed("nats-password")     { natsPassword = cfg.NatsPassword }
+				if cfg.NatsToken != "" && !changed("nats-token")           { natsToken = cfg.NatsToken }
+				if cfg.MqttBroker != "" && !changed("mqtt-broker")         { mqttBroker = cfg.MqttBroker }
+				if cfg.MqttTopic != "" && !changed("mqtt-topic")           { mqttTopic = cfg.MqttTopic }
+				if cfg.MqttQoS != nil && !changed("mqtt-qos")              { mqttQoS = *cfg.MqttQoS }
+				if cfg.MqttClientID != "" && !changed("mqtt-client-id")    { mqttClientID = cfg.MqttClientID }
+				if cfg.MqttUser != "" && !changed("mqtt-user")             { mqttUser = cfg.MqttUser }
+				if cfg.MqttPassword != "" && !changed("mqtt-password")     { mqttPassword = cfg.MqttPassword }
+				if cfg.MqttCACert != "" && !changed("mqtt-ca-cert")        { mqttCACert = cfg.MqttCACert }
+				if cfg.MqttCert != "" && !changed("mqtt-cert")             { mqttCert = cfg.MqttCert }
+				if cfg.MqttKey != "" && !changed("mqtt-key")               { mqttKey = cfg.MqttKey }
+				if cfg.MqttTLSInsecure != nil && !changed("mqtt-tls-insecure") { mqttTLSInsecure = *cfg.MqttTLSInsecure }
+				mqttDeviceCerts = cfg.MqttDeviceCerts
+				if cfg.PayloadTemplate != "" && !changed("payload-template")          { payloadTemplate = cfg.PayloadTemplate }
+				if cfg.PayloadTemplateFile != "" && !changed("payload-template-file") { payloadTemplateFile = cfg.PayloadTemplateFile }
+			}
 
-		if cfg.First != nil && !set["first"]                   { *linearFirst = *cfg.First }
-		if cfg.Last != nil && !set["last"]                     { *linearLast = *cfg.Last }
-		if cfg.Min != nil && !set["min"]                       { *cosMin = *cfg.Min }
-		if cfg.Max != nil && !set["max"]                       { *cosMax = *cfg.Max }
-		if cfg.Period != "" && !set["period"]                  { *cosPeriod = cfg.Period }
-		if cfg.WalkStart != nil && !set["walk-start"]          { *walkStart = *cfg.WalkStart }
-		if cfg.WalkStep != nil && !set["walk-step"]            { *walkStep = *cfg.WalkStep }
-		if cfg.WalkBias != nil && !set["walk-bias"]            { *walkBias = *cfg.WalkBias }
-		if cfg.WalkMin != nil && !set["walk-min"]              { *walkMin = *cfg.WalkMin }
-		if cfg.WalkMax != nil && !set["walk-max"]              { *walkMax = *cfg.WalkMax }
+			// Infer output sink from sink-specific flags when --output was not set.
+			if !cmd.Flags().Changed("output") {
+				switch {
+				case cmd.Flags().Changed("webhook-url"):
+					output = "webhook"
+				case cmd.Flags().Changed("nats-url"):
+					output = "nats"
+				case cmd.Flags().Changed("mqtt-broker"):
+					output = "mqtt"
+				}
+			}
 
-		if cfg.Output != "" && !set["output"]                  { *outputPtr = cfg.Output }
-		if cfg.WebhookURL != "" && !set["webhook-url"]         { *webhookURL = cfg.WebhookURL }
-		if cfg.WebhookToken != "" && !set["webhook-token"]     { *webhookToken = cfg.WebhookToken }
-		if cfg.NatsURL != "" && !set["nats-url"]               { *natsURL = cfg.NatsURL }
-		if cfg.NatsSubject != "" && !set["nats-subject"]       { *natsSubject = cfg.NatsSubject }
-		if cfg.NatsUser != "" && !set["nats-user"]             { *natsUser = cfg.NatsUser }
-		if cfg.NatsPassword != "" && !set["nats-password"]     { *natsPassword = cfg.NatsPassword }
-		if cfg.NatsToken != "" && !set["nats-token"]           { *natsToken = cfg.NatsToken }
-		if cfg.MqttBroker != "" && !set["mqtt-broker"]         { *mqttBroker = cfg.MqttBroker }
-		if cfg.MqttTopic != "" && !set["mqtt-topic"]           { *mqttTopic = cfg.MqttTopic }
-		if cfg.MqttQoS != nil && !set["mqtt-qos"]              { *mqttQoS = *cfg.MqttQoS }
-		if cfg.MqttClientID != "" && !set["mqtt-client-id"]    { *mqttClientID = cfg.MqttClientID }
-		if cfg.MqttUser != "" && !set["mqtt-user"]                   { *mqttUser = cfg.MqttUser }
-		if cfg.MqttPassword != "" && !set["mqtt-password"]           { *mqttPassword = cfg.MqttPassword }
-		if cfg.MqttCACert != "" && !set["mqtt-ca-cert"]              { *mqttCACert = cfg.MqttCACert }
-		if cfg.MqttCert != "" && !set["mqtt-cert"]                   { *mqttCert = cfg.MqttCert }
-		if cfg.MqttKey != "" && !set["mqtt-key"]                     { *mqttKey = cfg.MqttKey }
-		if cfg.MqttTLSInsecure != nil && !set["mqtt-tls-insecure"]   { *mqttTLSInsecure = *cfg.MqttTLSInsecure }
-		mqttDeviceCerts = cfg.MqttDeviceCerts
-		if cfg.PayloadTemplate != "" && !set["payload-template"]          { *payloadTemplateStr = cfg.PayloadTemplate }
-		if cfg.PayloadTemplateFile != "" && !set["payload-template-file"] { *payloadTemplateFile = cfg.PayloadTemplateFile }
-	}
+			// Build the renderer (file takes precedence over inline string).
+			renderer := Renderer(JSONRenderer)
+			if isoTime {
+				renderer = ISOJSONRenderer
+			}
+			if payloadTemplateFile != "" {
+				raw, err := os.ReadFile(payloadTemplateFile)
+				if err != nil {
+					return fmt.Errorf("cannot read payload-template-file: %w", err)
+				}
+				tmpl, err := template.New("payload").Parse(string(raw))
+				if err != nil {
+					return fmt.Errorf("invalid payload template: %w", err)
+				}
+				renderer = NewTemplateRenderer(tmpl, isoTime)
+			} else if payloadTemplate != "" {
+				tmpl, err := template.New("payload").Parse(payloadTemplate)
+				if err != nil {
+					return fmt.Errorf("invalid payload template: %w", err)
+				}
+				renderer = NewTemplateRenderer(tmpl, isoTime)
+			}
 
-	// Build the renderer (file takes precedence over inline string).
-	renderer := Renderer(JSONRenderer)
-	if *isoTimePtr {
-		renderer = ISOJSONRenderer
-	}
-	if *payloadTemplateFile != "" {
-		raw, err := os.ReadFile(*payloadTemplateFile)
-		if err != nil {
-			log.Fatalf("cannot read payload-template-file: %v", err)
-		}
-		tmpl, err := template.New("payload").Parse(string(raw))
-		if err != nil {
-			log.Fatalf("invalid payload template: %v", err)
-		}
-		renderer = NewTemplateRenderer(tmpl, *isoTimePtr)
-	} else if *payloadTemplateStr != "" {
-		tmpl, err := template.New("payload").Parse(*payloadTemplateStr)
-		if err != nil {
-			log.Fatalf("invalid payload template: %v", err)
-		}
-		renderer = NewTemplateRenderer(tmpl, *isoTimePtr)
-	}
+			// Initialise RNG.
+			rng := newRand()
+			if seed != 0 {
+				rng = seededRand(uint64(seed))
+			}
 
-	// Initialise RNG (seeded before any random values are consumed).
-	rng := newRand()
-	if *seedPtr != 0 {
-		rng = seededRand(uint64(*seedPtr))
-	}
-
-	// Infer output sink from sink-specific flags when --output was not set explicitly.
-	if !set["output"] {
-		switch {
-		case set["webhook-url"]:
-			*outputPtr = "webhook"
-		case set["nats-url"]:
-			*outputPtr = "nats"
-		case set["mqtt-broker"]:
-			*outputPtr = "mqtt"
-		}
-	}
-
-	// Build the output sink.
-	sink, err := buildSink(sinkConfig{
-		output:       *outputPtr,
-		webhookURL:   *webhookURL,
-		webhookToken: *webhookToken,
-		natsURL:      *natsURL,
-		natsSubject:  *natsSubject,
-		natsUser:     *natsUser,
-		natsPassword: *natsPassword,
-		natsToken:    *natsToken,
-		mqttBroker:   *mqttBroker,
-		mqttTopic:    *mqttTopic,
-		mqttClientID: *mqttClientID,
-		mqttQoS:      *mqttQoS,
-		mqttUser:        *mqttUser,
-		mqttPassword:    *mqttPassword,
-		mqttCACert:      *mqttCACert,
-		mqttCert:        *mqttCert,
-		mqttKey:         *mqttKey,
-		mqttTLSInsecure: *mqttTLSInsecure,
-		mqttDeviceCerts: mqttDeviceCerts,
-		renderer:        renderer,
-	})
-	if err != nil {
-		log.Fatalf("sink: %v", err)
-	}
-	defer func() {
-		if err := sink.Close(); err != nil {
-			log.Printf("sink close error: %v", err)
-		}
-	}()
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
-	// Replay mode: send a recorded JSON-lines file through the sink.
-	if *replayFilePtr != "" {
-		stepSeconds, err := GetSeconds(*stepPtr)
-		if err != nil {
-			log.Fatalf("invalid --step: %v", err)
-		}
-		if err := runReplay(ctx, *replayFilePtr, sink, *realtimePtr, stepSeconds); err != nil {
-			log.Fatalf("%v", err)
-		}
-		return
-	}
-
-	if *devicesPtr < 1 {
-		log.Fatal("--devices must be at least 1")
-	}
-
-	// Parse durations.
-	durationSeconds, err := GetSeconds(*durationPtr)
-	if err != nil {
-		log.Fatalf("invalid --duration: %v", err)
-	}
-	stepSeconds, err := GetSeconds(*stepPtr)
-	if err != nil {
-		log.Fatalf("invalid --step: %v", err)
-	}
-
-	start := time.Now().Unix()
-
-	// Build device names.
-	devices := make([]string, *devicesPtr)
-	for i := range devices {
-		if *devicesPtr == 1 {
-			devices[i] = *devicePtr
-		} else {
-			devices[i] = fmt.Sprintf("%s-%d", *devicePtr, i)
-		}
-	}
-
-	itemCount := durationSeconds / stepSeconds
-
-	// Multi-field mode: only available via config file.
-	if cfg != nil && len(cfg.Fields) > 0 {
-		fieldFns := make(map[string]func(float64) float64, len(cfg.Fields))
-		for name, fc := range cfg.Fields {
-			fn, err := buildFieldFn(rng, fc, start, durationSeconds)
+			// Build the output sink.
+			sink, err := buildSink(sinkConfig{
+				output:          output,
+				webhookURL:      webhookURL,
+				webhookToken:    webhookToken,
+				natsURL:         natsURL,
+				natsSubject:     natsSubject,
+				natsUser:        natsUser,
+				natsPassword:    natsPassword,
+				natsToken:       natsToken,
+				mqttBroker:      mqttBroker,
+				mqttTopic:       mqttTopic,
+				mqttClientID:    mqttClientID,
+				mqttQoS:         mqttQoS,
+				mqttUser:        mqttUser,
+				mqttPassword:    mqttPassword,
+				mqttCACert:      mqttCACert,
+				mqttCert:        mqttCert,
+				mqttKey:         mqttKey,
+				mqttTLSInsecure: mqttTLSInsecure,
+				mqttDeviceCerts: mqttDeviceCerts,
+				renderer:        renderer,
+			})
 			if err != nil {
-				log.Fatalf("field %q: %v", name, err)
+				return fmt.Errorf("sink: %w", err)
 			}
-			fieldFns[name] = fn
-		}
-		scales := make([]float64, *devicesPtr)
-		for i := range scales {
-			scales[i] = 1.0
-			if *spreadPtr > 0 {
-				scales[i] = 1.0 + *spreadPtr*(2*rng.Float64()-1)
+			defer func() {
+				if err := sink.Close(); err != nil {
+					log.Printf("sink close error: %v", err)
+				}
+			}()
+
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+
+			// Replay mode.
+			if replayFile != "" {
+				stepSeconds, err := GetSeconds(step)
+				if err != nil {
+					return fmt.Errorf("invalid --step: %w", err)
+				}
+				return runReplay(ctx, replayFile, sink, realtime, stepSeconds)
 			}
-		}
-		if *realtimePtr {
-			runRealtimeMulti(ctx, rng, fieldFns, scales, *noisePtr, *anomalyRatePtr, *anomalyFactorPtr, sink, devices, itemCount, stepSeconds)
-		} else {
-			runBatchMulti(rng, fieldFns, scales, *noisePtr, *anomalyRatePtr, *anomalyFactorPtr, sink, devices, start, itemCount, stepSeconds)
-		}
-		return
+
+			if devices < 1 {
+				return fmt.Errorf("--devices must be at least 1")
+			}
+
+			durationSeconds, err := GetSeconds(duration)
+			if err != nil {
+				return fmt.Errorf("invalid --duration: %w", err)
+			}
+			stepSeconds, err := GetSeconds(step)
+			if err != nil {
+				return fmt.Errorf("invalid --step: %w", err)
+			}
+
+			start := time.Now().Unix()
+
+			deviceNames := make([]string, devices)
+			for i := range deviceNames {
+				if devices == 1 {
+					deviceNames[i] = device
+				} else {
+					deviceNames[i] = fmt.Sprintf("%s-%d", device, i)
+				}
+			}
+
+			itemCount := durationSeconds / stepSeconds
+
+			// Multi-field mode: only available via config file.
+			if cfg != nil && len(cfg.Fields) > 0 {
+				fieldFns := make(map[string]func(float64) float64, len(cfg.Fields))
+				for name, fc := range cfg.Fields {
+					fn, err := buildFieldFn(rng, fc, start, durationSeconds)
+					if err != nil {
+						return fmt.Errorf("field %q: %w", name, err)
+					}
+					fieldFns[name] = fn
+				}
+				scales := make([]float64, devices)
+				for i := range scales {
+					scales[i] = 1.0
+					if spread > 0 {
+						scales[i] = 1.0 + spread*(2*rng.Float64()-1)
+					}
+				}
+				if realtime {
+					runRealtimeMulti(ctx, rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, sink, deviceNames, itemCount, stepSeconds)
+				} else {
+					runBatchMulti(rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, sink, deviceNames, start, itemCount, stepSeconds)
+				}
+				return nil
+			}
+
+			// Single-field mode.
+			var baseFn func(float64) float64
+			switch curveType {
+			case "linear":
+				baseFn = GetLinear(linearFirst, linearLast, start, durationSeconds)
+			case "cos":
+				periodSeconds, err := GetSeconds(cosPeriod)
+				if err != nil {
+					return fmt.Errorf("invalid --period: %w", err)
+				}
+				baseFn = GetCosinus(cosMin, cosMax, periodSeconds)
+			case "log":
+				baseFn = GetLog(start)
+			case "exp":
+				baseFn = GetExp(start, durationSeconds)
+			case "walk":
+				// baseFn intentionally left nil; each device gets its own closure below.
+			default:
+				return fmt.Errorf("unknown curve type %q (use cos, linear, log, exp, walk)", curveType)
+			}
+
+			fns := make([]func(float64) float64, devices)
+			for i := range fns {
+				scale := 1.0
+				if spread > 0 {
+					scale = 1.0 + spread*(2*rng.Float64()-1)
+				}
+				if curveType == "walk" {
+					fns[i] = WithAnomaly(rng, WithNoise(rng, GetRandomWalk(rng, walkStart*scale, walkStep, walkBias, walkMin, walkMax), noise), anomalyRate, anomalyFactor)
+				} else {
+					fn := baseFn
+					s := scale
+					fns[i] = WithAnomaly(rng, WithNoise(rng, func(x float64) float64 { return fn(x) * s }, noise), anomalyRate, anomalyFactor)
+				}
+			}
+			if realtime {
+				runRealtime(ctx, fns, sink, deviceNames, itemCount, stepSeconds)
+			} else {
+				runBatch(fns, sink, deviceNames, start, itemCount, stepSeconds)
+			}
+			return nil
+		},
 	}
 
-	// Single-field mode.
-	// Walk is handled per-device (stateful closure); all other types share a pure baseFn.
-	var baseFn func(float64) float64
-	switch *typePtr {
-	case "linear":
-		baseFn = GetLinear(*linearFirst, *linearLast, start, durationSeconds)
-	case "cos":
-		periodSeconds, err := GetSeconds(*cosPeriod)
-		if err != nil {
-			log.Fatalf("invalid --period: %v", err)
-		}
-		baseFn = GetCosinus(*cosMin, *cosMax, periodSeconds)
-	case "log":
-		baseFn = GetLog(start)
-	case "exp":
-		baseFn = GetExp(start, durationSeconds)
-	case "walk":
-		// baseFn intentionally left nil; each device gets its own closure below.
-	default:
-		log.Fatalf("unknown curve type %q (use cos, linear, log, exp, walk)", *typePtr)
+	f := rootCmd.Flags()
+
+	// General
+	f.StringVar(&configFile, "config", "", "path to YAML config file (CLI flags take precedence)")
+	f.BoolVar(&generateConfig, "generate-config", false, "print a sample YAML config file and exit")
+	f.StringVar(&curveType, "type", "walk", "curve type: cos, linear, log, exp, walk")
+	f.StringVar(&duration, "duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
+	f.StringVar(&step, "step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
+	f.StringVar(&device, "device", "device", "device/sensor name (or prefix when --devices > 1)")
+	f.IntVar(&devices, "devices", 1, "number of devices to simulate simultaneously")
+	f.Float64Var(&spread, "spread", 0.0, "per-device value spread as a ratio, e.g. 0.1 = ±10%")
+	f.Float64Var(&noise, "noise", 0.0, "random noise per sample as a ratio, e.g. 0.05 = ±5%")
+	f.Float64Var(&anomalyRate, "anomaly-rate", 0.0, "probability of injecting an anomaly per point, e.g. 0.02 = 2%")
+	f.Float64Var(&anomalyFactor, "anomaly-factor", 3.0, "anomaly magnitude: spike = value × factor, drop = value / factor")
+	f.BoolVar(&realtime, "realtime", false, "emit one point per step interval using wall-clock time")
+	f.Int64Var(&seed, "seed", 0, "random seed for reproducible output (0 = random); batch mode only")
+	f.StringVar(&replayFile, "replay-file", "", "replay a JSON-lines file through the configured sink")
+
+	// Cosine
+	f.Float64Var(&cosMin, "min", 10, "minimum value (cos)")
+	f.Float64Var(&cosMax, "max", 25, "maximum value (cos)")
+	f.StringVar(&cosPeriod, "period", "1d", "oscillation period (cos), e.g. 1d, 12h")
+
+	// Linear
+	f.Float64Var(&linearFirst, "first", 0, "starting value (linear)")
+	f.Float64Var(&linearLast, "last", 1, "ending value (linear)")
+
+	// Walk
+	f.Float64Var(&walkStart, "walk-start", 20.0, "starting value (walk)")
+	f.Float64Var(&walkStep, "walk-step", 0.5, "max delta per sample (walk)")
+	f.Float64Var(&walkBias, "walk-bias", 0.0, "directional drift per step, negative = downward (walk)")
+	f.Float64Var(&walkMin, "walk-min", 15.0, "lower clamp; clamping disabled when walk-min == walk-max (walk)")
+	f.Float64Var(&walkMax, "walk-max", 35.0, "upper clamp; clamping disabled when walk-min == walk-max (walk)")
+
+	// Output
+	f.StringVar(&output, "output", "stdout", "output backend: stdout, webhook, nats, mqtt")
+	f.BoolVar(&isoTime, "iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
+	f.StringVar(&payloadTemplate, "payload-template", "", "Go text/template string for JSON payload")
+	f.StringVar(&payloadTemplateFile, "payload-template-file", "", "path to a Go text/template file for JSON payload")
+
+	// Webhook
+	f.StringVar(&webhookURL, "webhook-url", "", "webhook URL")
+	f.StringVar(&webhookToken, "webhook-token", "", "bearer token for webhook Authorization header")
+
+	// NATS
+	f.StringVar(&natsURL, "nats-url", "nats://localhost:4222", "NATS server URL")
+	f.StringVar(&natsSubject, "nats-subject", "genx", "NATS subject to publish to")
+	f.StringVar(&natsUser, "nats-user", "", "NATS username")
+	f.StringVar(&natsPassword, "nats-password", "", "NATS password")
+	f.StringVar(&natsToken, "nats-token", "", "NATS authentication token")
+
+	// MQTT
+	f.StringVar(&mqttBroker, "mqtt-broker", "tcp://localhost:1883", "MQTT broker URL")
+	f.StringVar(&mqttTopic, "mqtt-topic", "genx", "MQTT topic to publish to")
+	f.IntVar(&mqttQoS, "mqtt-qos", 0, "MQTT QoS level (0, 1, or 2)")
+	f.StringVar(&mqttClientID, "mqtt-client-id", fmt.Sprintf("genx-%d", os.Getpid()), "MQTT client ID")
+	f.StringVar(&mqttUser, "mqtt-user", "", "MQTT username")
+	f.StringVar(&mqttPassword, "mqtt-password", "", "MQTT password")
+	f.StringVar(&mqttCACert, "mqtt-ca-cert", "", "CA certificate for verifying the broker's TLS certificate")
+	f.StringVar(&mqttCert, "mqtt-cert", "", "client certificate for mTLS authentication")
+	f.StringVar(&mqttKey, "mqtt-key", "", "client private key for mTLS authentication")
+	f.BoolVar(&mqttTLSInsecure, "mqtt-tls-insecure", false, "skip broker TLS certificate verification (testing only)")
+
+	// Annotate flags with groups for the help output.
+	groups := []struct {
+		name  string
+		flags []string
+	}{
+		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "realtime", "seed", "replay-file", "noise", "spread", "anomaly-rate", "anomaly-factor"}},
+		{"Cosine curve (--type cos)", []string{"min", "max", "period"}},
+		{"Linear curve (--type linear)", []string{"first", "last"}},
+		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
+		{"Output", []string{"output", "iso-time"}},
+		{"Template", []string{"payload-template", "payload-template-file"}},
+		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},
+		{"NATS (--output nats)", []string{"nats-url", "nats-subject", "nats-user", "nats-password", "nats-token"}},
+		{"MQTT (--output mqtt)", []string{"mqtt-broker", "mqtt-topic", "mqtt-qos", "mqtt-client-id", "mqtt-user", "mqtt-password", "mqtt-ca-cert", "mqtt-cert", "mqtt-key", "mqtt-tls-insecure"}},
 	}
 
-	fns := make([]func(float64) float64, *devicesPtr)
-	for i := range fns {
-		scale := 1.0
-		if *spreadPtr > 0 {
-			scale = 1.0 + *spreadPtr*(2*rng.Float64()-1)
-		}
-		if *typePtr == "walk" {
-			// Spread varies the starting value so devices begin at different levels.
-			fns[i] = WithAnomaly(rng, WithNoise(rng, GetRandomWalk(rng, *walkStart*scale, *walkStep, *walkBias, *walkMin, *walkMax), *noisePtr), *anomalyRatePtr, *anomalyFactorPtr)
-		} else {
-			fn := baseFn
-			s := scale
-			fns[i] = WithAnomaly(rng, WithNoise(rng, func(x float64) float64 { return fn(x) * s }, *noisePtr), *anomalyRatePtr, *anomalyFactorPtr)
+	for _, g := range groups {
+		for _, name := range g.flags {
+			if fl := f.Lookup(name); fl != nil {
+				fl.Annotations = map[string][]string{"group": {g.name}}
+			}
 		}
 	}
-	if *realtimePtr {
-		runRealtime(ctx, fns, sink, devices, itemCount, stepSeconds)
-	} else {
-		runBatch(fns, sink, devices, start, itemCount, stepSeconds)
+
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		fmt.Fprintln(cmd.OutOrStdout(), cmd.Long)
+		fmt.Fprintln(cmd.OutOrStdout())
+		fmt.Fprintf(cmd.OutOrStdout(), "Usage:\n  genx [flags]\n\n")
+
+		skippedDefaults := map[string]bool{"false": true, "0": true, "<nil>": true}
+		for _, g := range groups {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s:\n", g.name)
+			for _, name := range g.flags {
+				fl := f.Lookup(name)
+				if fl == nil {
+					continue
+				}
+				if d := fl.DefValue; d != "" && !skippedDefaults[d] {
+					fmt.Fprintf(cmd.OutOrStdout(), "  --%-30s %s (default: %s)\n", fl.Name, fl.Usage, d)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "  --%-30s %s\n", fl.Name, fl.Usage)
+				}
+			}
+			fmt.Fprintln(cmd.OutOrStdout())
+		}
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
 	}
 }
