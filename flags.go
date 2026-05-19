@@ -358,6 +358,49 @@ func flagGroups() []flagGroup {
 	}
 }
 
+// defaultCLIFlags returns a cliFlags populated with the same defaults as
+// registerFlags, without requiring a cobra command to be initialised.
+func defaultCLIFlags() *cliFlags {
+	return &cliFlags{
+		curveType:         "walk",
+		duration:          "1d",
+		step:              "1h",
+		device:            "device",
+		devices:           1,
+		anomalyFactor:     3.0,
+		cosPeriod:         "1d",
+		dutyCycle:         0.5,
+		cosMin:            10,
+		cosMax:            25,
+		linearLast:        1,
+		walkStart:         20.0,
+		walkStep:          0.5,
+		walkMin:           15.0,
+		walkMax:           35.0,
+		geoLat:            48.8566,
+		geoLon:            2.3522,
+		geoSpeed:          10.0,
+		geoDrift:          15.0,
+		output:            "stdout",
+		format:            "json",
+		influxMeasurement: "genx",
+		cloudEventSource:  "/genx",
+		cloudEventType:    "io.genx.measurement",
+		prometheusPort:    9091,
+		prometheusMetric:  "genx",
+		mqttBroker:        "tcp://localhost:1883",
+		mqttTopic:         "genx",
+		natsURL:           "nats://localhost:4222",
+		natsSubject:       "genx",
+		kafkaBrokers:      "localhost:9092",
+		kafkaTopic:        "genx",
+		otlpEndpoint:      "localhost:4317",
+		otlpMetricName:    "genx",
+		influxdbURL:       "http://localhost:8086",
+		influxdbBucket:    "genx",
+	}
+}
+
 func setupHelp(cmd *cobra.Command) {
 	f := cmd.Flags()
 	groups := flagGroups()

@@ -90,27 +90,6 @@ curl http://localhost:8888/
 
 ---
 
-## P3 — `genx validate` subcommand
-
-**Why:** Long realtime runs shouldn't fail after 10 minutes because of a typo in the config. A validate subcommand lets users check config correctness without running.
-
-**Idea:** Add a `validate` subcommand that loads the config, runs all validation checks, resolves device names, parses durations, and prints a summary of what would run — without connecting to any sink or emitting any data.
-
-```
-genx validate --config examples/scenario/config.yaml
-✓ Config loaded
-✓ 1 device: sensor-1
-✓ 4 scenario phases: 10m normal, 5m overheat, 2m dropout, 10m recovery
-✓ Total duration: 27m, ~54 points
-✓ Output: stdout
-```
-
-**Notes:**
-- Reuses all existing validation logic.
-- Does not instantiate sinks (no network connections, no file creation).
-- Could warn on suspicious values (e.g. anomaly-rate=0.99, very short step with realtime).
-
----
 
 ## P3 — Shell completion
 
