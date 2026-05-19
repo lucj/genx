@@ -3,6 +3,12 @@ global:
   evaluation_interval: 5s
 
 scrape_configs:
-  - job_name: genx
+  # Push mode (--profile demo / test-otlp): genx → OTel Collector → here
+  - job_name: genx-otlp
     static_configs:
       - targets: ['otel-collector:9090']
+
+  # Pull mode (--profile pull / test-prometheus): genx exposes /metrics directly
+  - job_name: genx-pull
+    static_configs:
+      - targets: ['genx-pull:9091', 'test-prometheus:9091']

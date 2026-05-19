@@ -12,8 +12,8 @@ services:
       - "4317:4317"   # OTLP gRPC  → genx --otlp-endpoint localhost:4317
       - "4318:4318"   # OTLP HTTP  → genx --otlp-endpoint localhost:4318 --otlp-http
 
-  # Prometheus — scrapes the OTel Collector's /metrics endpoint and
-  # serves the PromQL API that Grafana queries.
+  # Prometheus — scrapes the OTel Collector (push mode) and/or genx directly
+  # (pull mode), and serves the PromQL API that Grafana queries.
   prometheus:
     image: prom/prometheus:latest
     container_name: genx-prometheus
@@ -50,7 +50,7 @@ services:
       timeout: 3s
       retries: 15
 
-  # Optional: run genx inside Docker (builds from the repo root).
+  # Push mode: genx → OTel Collector → Prometheus → Grafana
   # Usage: docker compose --profile demo up
   genx:
     build: ../..
@@ -65,6 +65,23 @@ services:
       --type cos
       --devices 3
       --noise 0.05
-      --duration 10m
+      --duration 60m
+      --step 5s
+      --realtime
+
+  # Pull mode: genx exposes /metrics, Prometheus scrapes it directly
+  # Usage: docker compose --profile pull up
+  genx-pull:
+    build: ../..
+    profiles: [pull]
+    ports:
+      - "9091:9091"
+    command: >
+      --output prometheus
+      --prometheus-port 9091
+      --type cos
+      --devices 3
+      --noise 0.05
+      --duration 60m
       --step 5s
       --realtime

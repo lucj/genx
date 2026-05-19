@@ -49,6 +49,8 @@ type sinkConfig struct {
 	otlpHeaders    map[string]string
 	otlpInsecure   bool
 	otlpMetricName string
+	prometheusPort   int
+	prometheusMetric string
 	renderer        Renderer
 }
 
@@ -74,8 +76,10 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 		return NewKafkaSink(cfg.kafkaBrokers, cfg.kafkaTopic, cfg.kafkaUsername, cfg.kafkaPassword, cfg.kafkaTLS, cfg.kafkaTLSInsecure, cfg.renderer)
 	case "otlp":
 		return NewOTLPSink(cfg.otlpEndpoint, cfg.otlpHTTP, cfg.otlpHeaders, cfg.otlpInsecure, cfg.otlpMetricName)
+	case "prometheus":
+		return NewPrometheusSink(cfg.prometheusPort, cfg.prometheusMetric)
 	default:
-		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka, otlp)", cfg.output)
+		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka, otlp, prometheus)", cfg.output)
 	}
 }
 
@@ -167,6 +171,10 @@ func main() {
 		otlpHeaders    []string
 		otlpInsecure   bool
 		otlpMetricName string
+
+		// Prometheus pull
+		prometheusPort   int
+		prometheusMetric string
 	)
 
 	var mqttDeviceCerts map[string]MqttDeviceCert
@@ -253,6 +261,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.KafkaPassword != "" && !changed("kafka-password")       { kafkaPassword = cfg.KafkaPassword }
 				if cfg.KafkaTLS != nil && !changed("kafka-tls")                { kafkaTLS = *cfg.KafkaTLS }
 				if cfg.KafkaTLSInsecure != nil && !changed("kafka-tls-insecure") { kafkaTLSInsecure = *cfg.KafkaTLSInsecure }
+				if cfg.PrometheusPort != nil && !changed("prometheus-port")         { prometheusPort = *cfg.PrometheusPort }
+				if cfg.PrometheusMetric != "" && !changed("prometheus-metric")     { prometheusMetric = cfg.PrometheusMetric }
 				if cfg.OTLPEndpoint != "" && !changed("otlp-endpoint")           { otlpEndpoint = cfg.OTLPEndpoint }
 				if cfg.OTLPInsecure != nil && !changed("otlp-insecure")          { otlpInsecure = *cfg.OTLPInsecure }
 				if cfg.OTLPHTTP != nil && !changed("otlp-http")                  { otlpHTTP = *cfg.OTLPHTTP }
@@ -279,6 +289,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					output = "kafka"
 				case cmd.Flags().Changed("otlp-endpoint"):
 					output = "otlp"
+				case cmd.Flags().Changed("prometheus-port"):
+					output = "prometheus"
 				}
 			}
 
@@ -384,6 +396,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				otlpHeaders:    otlpHeaderMap,
 				otlpInsecure:   otlpInsecure,
 				otlpMetricName: otlpMetricName,
+				prometheusPort:   prometheusPort,
+				prometheusMetric: prometheusMetric,
 				renderer:        renderer,
 			})
 			if err != nil {
@@ -558,6 +572,10 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.StringVar(&format, "format", "json", "output format for stdout/file sinks: json, csv, or influx")
 	f.BoolVar(&isoTime, "iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
 	f.StringVar(&influxMeasurement, "influx-measurement", "genx", "InfluxDB measurement name (--format influx)")
+
+	// Prometheus pull
+	f.IntVar(&prometheusPort, "prometheus-port", 9091, "port to expose /metrics on (--output prometheus)")
+	f.StringVar(&prometheusMetric, "prometheus-metric", "genx", "base metric name (--output prometheus); multi-field appends _<fieldname>")
 	f.StringVar(&payloadTemplate, "payload-template", "", "Go text/template string for JSON payload")
 	f.StringVar(&payloadTemplateFile, "payload-template-file", "", "path to a Go text/template file for JSON payload")
 
@@ -621,6 +639,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		{"File (--output file)", []string{"file-path", "file-max-size", "file-max-age"}},
 		{"Kafka (--output kafka)", []string{"kafka-brokers", "kafka-topic", "kafka-username", "kafka-password", "kafka-tls", "kafka-tls-insecure"}},
 		{"OTLP (--output otlp)", []string{"otlp-endpoint", "otlp-http", "otlp-header", "otlp-insecure", "otlp-metric"}},
+		{"Prometheus pull (--output prometheus)", []string{"prometheus-port", "prometheus-metric"}},
 	}
 
 	for _, g := range groups {

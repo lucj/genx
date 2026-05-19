@@ -73,6 +73,9 @@ type Config struct {
 	KafkaTLS         *bool  `yaml:"kafka-tls"`
 	KafkaTLSInsecure *bool  `yaml:"kafka-tls-insecure"`
 
+	PrometheusPort   *int   `yaml:"prometheus-port"`
+	PrometheusMetric string `yaml:"prometheus-metric"`
+
 	OTLPEndpoint   string   `yaml:"otlp-endpoint"`
 	OTLPHTTP       *bool    `yaml:"otlp-http"`
 	OTLPHeaders    []string `yaml:"otlp-headers"`

@@ -2,7 +2,7 @@
   "title": "genx IoT Metrics",
   "uid": "genx-otlp-001",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": { "from": "now-5m", "to": "now" },
   "timezone": "browser",
@@ -43,7 +43,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "{service_name=\"genx\", __name__!=\"target_info\"}",
+          "expr": "{__name__=~\"genx.*\", device!=\"\"}",
           "legendFormat": "{{device}} — {{__name__}}",
           "interval": "5s"
         }
@@ -79,8 +79,8 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "{service_name=\"genx\", __name__!=\"target_info\"}",
-          "legendFormat": "{{device}}",
+          "expr": "{__name__=~\"genx.*\", device!=\"\"}",
+          "legendFormat": "{{device}} ({{__name__}})",
           "instant": true
         }
       ]
