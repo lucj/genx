@@ -302,6 +302,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.OTLPMetricName != "" && !changed("otlp-metric")           { otlpMetricName = cfg.OTLPMetricName }
 				if len(cfg.OTLPHeaders) > 0 && !changed("otlp-header")           { otlpHeaders = cfg.OTLPHeaders }
 				if cfg.Format != "" && !changed("format")                            { format = cfg.Format }
+				if cfg.ISOTimestamp != nil && !changed("iso-time")                   { isoTime = *cfg.ISOTimestamp }
 				if cfg.InfluxMeasurement != "" && !changed("influx-measurement")     { influxMeasurement = cfg.InfluxMeasurement }
 				if cfg.CloudEventSource != "" && !changed("cloudevent-source")       { cloudEventSource = cfg.CloudEventSource }
 				if cfg.CloudEventType != "" && !changed("cloudevent-type")           { cloudEventType = cfg.CloudEventType }
