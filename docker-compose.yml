@@ -33,6 +33,21 @@ services:
       --webhook-token secret
       --type cos --duration 30s --step 5s --realtime
 
+  # Run: docker compose --profile test-cloudevent up
+  # genx sends CloudEvents-wrapped points to the echo server.
+  # Watch: docker compose logs -f webhook
+  test-cloudevent:
+    build: .
+    profiles: [test-cloudevent]
+    depends_on:
+      webhook:
+        condition: service_healthy
+    command: >
+      --output webhook
+      --webhook-url http://webhook:8080
+      --format cloudevent
+      --type cos --duration 30s --step 5s --realtime
+
   # ---------------------------------------------------------------------------
   # MQTT
   # ---------------------------------------------------------------------------
