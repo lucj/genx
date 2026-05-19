@@ -1,0 +1,9 @@
+{
+  "sensor_id": "{{.Device}}",
+  "recorded_at": {{.Timestamp}},
+  "measurements": {
+    "temperature": {{.Fields.temperature}},
+    "humidity":    {{.Fields.humidity}},
+    "pressure":    {{.Fields.pressure}}
+  }
+}

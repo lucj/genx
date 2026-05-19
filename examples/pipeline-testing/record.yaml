@@ -1,0 +1,10 @@
+type: cos
+min: 18
+max: 26
+period: 12h
+noise: 0.03
+anomaly-rate: 0.02
+anomaly-factor: 4
+seed: 42
+duration: 1h
+step: 1m

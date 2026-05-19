@@ -1,0 +1,19 @@
+duration: 1h
+step: 1m
+device: env-sensor
+
+fields:
+  temperature:
+    type: cos
+    min: 18
+    max: 26
+    period: 12h
+  humidity:
+    type: cos
+    min: 40
+    max: 80
+    period: 8h
+  pressure:
+    type: linear
+    first: 1010
+    last: 1015
