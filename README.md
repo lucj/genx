@@ -46,6 +46,7 @@ genx --generate-config > config.yaml
 | `square` | Binary high/low | `--min`, `--max`, `--period`, `--duty-cycle` |
 | `log` | Logarithmic growth | — |
 | `exp` | Exponential growth | — |
+| `geo` | GPS track (lat/lon walk) | `--geo-lat`, `--geo-lon`, `--geo-speed`, `--geo-bearing`, `--geo-drift` |
 
 ```bash
 # cosine between 20–30 °C, 24 h period
@@ -57,6 +58,23 @@ genx --type walk --walk-start 100 --walk-step 2 --walk-bias -0.1 \
 ```
 
 `--walk-bias` adds a constant drift per step. `--walk-min` / `--walk-max` clamp the value; clamping is disabled when both are `0`.
+
+## Geospatial simulation
+
+`--type geo` simulates a moving device. Each step advances the position by `speed × step` metres in the current bearing, then randomly adjusts the bearing by up to ±`drift` degrees. Outputs `lat` and `lon` as named fields.
+
+```bash
+# Single vehicle starting in Paris, 10 m/s, heading north
+genx --type geo --duration 1h --step 30s --realtime
+{"device":"device","timestamp":1715000000,"fields":{"lat":48.8620,"lon":2.3522}}
+{"device":"device","timestamp":1715000030,"fields":{"lat":48.8674,"lon":2.3519}}
+...
+
+# Fleet of 3 trucks, moderate bearing drift
+genx --type geo --devices 3 --geo-speed 25 --geo-drift 20 --duration 2h --step 10s --realtime
+```
+
+Works with all output sinks and formats unchanged.
 
 ## Fleet mode
 
@@ -299,6 +317,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--realtime` | false | Emit one point per step using real wall-clock time |
 | `--seed` | `0` | Fix the RNG seed for reproducible output (0 = random) |
 | `--replay-file` | | Path to a JSON-lines file to replay through the sink |
+| `--rate` | `0` | Max points per second across all devices (0 = unlimited) |
 | `--noise` | `0` | Random noise per sample as a ratio (e.g. `0.05` = ±5%) |
 | `--spread` | `0` | Per-device value spread as a ratio (e.g. `0.1` = ±10%) |
 | `--anomaly-rate` | `0` | Probability of injecting a spike or drop per point |
@@ -330,6 +349,16 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--walk-bias` | `0` | Per-step directional drift (negative = downward) |
 | `--walk-min` | `15` | Lower clamp; disabled when equal to `--walk-max` |
 | `--walk-max` | `35` | Upper clamp; disabled when equal to `--walk-min` |
+
+### Geo (`--type geo`)
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--geo-lat` | `48.8566` | Starting latitude |
+| `--geo-lon` | `2.3522` | Starting longitude |
+| `--geo-speed` | `10` | Speed in m/s |
+| `--geo-bearing` | `0` | Initial bearing in degrees (0=N, 90=E, 180=S, 270=W) |
+| `--geo-drift` | `15` | Max random bearing change per step in degrees |
 
 ### Output
 

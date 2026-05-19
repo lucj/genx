@@ -100,6 +100,7 @@ func main() {
 		realtime    bool
 		seed        int64
 		replayFile  string
+		rate        float64
 		generateConfig bool
 
 		// Periodic curves (cos, sawtooth, square)
@@ -118,6 +119,13 @@ func main() {
 		walkBias  float64
 		walkMin   float64
 		walkMax   float64
+
+		// Geo
+		geoLat     float64
+		geoLon     float64
+		geoSpeed   float64
+		geoBearing float64
+		geoDrift   float64
 
 		// Output
 		output             string
@@ -220,6 +228,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.Realtime != nil && !changed("realtime")             { realtime = *cfg.Realtime }
 				if cfg.Seed != nil && !changed("seed")                     { seed = *cfg.Seed }
 				if cfg.ReplayFile != "" && !changed("replay-file")         { replayFile = cfg.ReplayFile }
+				if cfg.Rate != nil && !changed("rate")                     { rate = *cfg.Rate }
 
 				if cfg.First != nil && !changed("first")                   { linearFirst = *cfg.First }
 				if cfg.Last != nil && !changed("last")                     { linearLast = *cfg.Last }
@@ -232,6 +241,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.WalkBias != nil && !changed("walk-bias")            { walkBias = *cfg.WalkBias }
 				if cfg.WalkMin != nil && !changed("walk-min")              { walkMin = *cfg.WalkMin }
 				if cfg.WalkMax != nil && !changed("walk-max")              { walkMax = *cfg.WalkMax }
+				if cfg.GeoLat != nil && !changed("geo-lat")                { geoLat = *cfg.GeoLat }
+				if cfg.GeoLon != nil && !changed("geo-lon")                { geoLon = *cfg.GeoLon }
+				if cfg.GeoSpeed != nil && !changed("geo-speed")            { geoSpeed = *cfg.GeoSpeed }
+				if cfg.GeoBearing != nil && !changed("geo-bearing")        { geoBearing = *cfg.GeoBearing }
+				if cfg.GeoDrift != nil && !changed("geo-drift")            { geoDrift = *cfg.GeoDrift }
 
 				if cfg.Output != "" && !changed("output")                  { output = cfg.Output }
 				if cfg.WebhookURL != "" && !changed("webhook-url")         { webhookURL = cfg.WebhookURL }
@@ -465,9 +479,23 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					}
 				}
 				if realtime {
-					runRealtimeMulti(ctx, rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, dropoutRate, sink, deviceNames, itemCount, stepSeconds)
+					runRealtimeMulti(ctx, rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, dropoutRate, sink, deviceNames, itemCount, stepSeconds, rate)
 				} else {
-					runBatchMulti(rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, dropoutRate, sink, deviceNames, start, itemCount, stepSeconds)
+					runBatchMulti(rng, fieldFns, scales, noise, anomalyRate, anomalyFactor, dropoutRate, sink, deviceNames, start, itemCount, stepSeconds, rate)
+				}
+				return nil
+			}
+
+			// Geo mode.
+			if curveType == "geo" {
+				walkers := make([]*GeoWalker, devices)
+				for i := range walkers {
+					walkers[i] = NewGeoWalker(geoLat, geoLon, geoBearing, geoSpeed, geoDrift)
+				}
+				if realtime {
+					runRealtimeGeo(ctx, rng, walkers, sink, deviceNames, itemCount, stepSeconds, dropoutRate, rate)
+				} else {
+					runBatchGeo(rng, walkers, sink, deviceNames, start, itemCount, stepSeconds, dropoutRate, rate)
 				}
 				return nil
 			}
@@ -505,7 +533,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 			case "walk":
 				// baseFn intentionally left nil; each device gets its own closure below.
 			default:
-				return fmt.Errorf("unknown curve type %q (use cos, linear, log, exp, walk, sawtooth, square)", curveType)
+				return fmt.Errorf("unknown curve type %q (use cos, linear, log, exp, walk, sawtooth, square, geo)", curveType)
 			}
 
 			fns := make([]func(float64) float64, devices)
@@ -523,9 +551,9 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}
 			if realtime {
-				runRealtime(ctx, rng, fns, sink, deviceNames, itemCount, stepSeconds, dropoutRate)
+				runRealtime(ctx, rng, fns, sink, deviceNames, itemCount, stepSeconds, dropoutRate, rate)
 			} else {
-				runBatch(rng, fns, sink, deviceNames, start, itemCount, stepSeconds, dropoutRate)
+				runBatch(rng, fns, sink, deviceNames, start, itemCount, stepSeconds, dropoutRate, rate)
 			}
 			return nil
 		},
@@ -536,7 +564,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	// General
 	f.StringVar(&configFile, "config", "", "path to YAML config file (CLI flags take precedence)")
 	f.BoolVar(&generateConfig, "generate-config", false, "print a sample YAML config file and exit")
-	f.StringVar(&curveType, "type", "walk", "curve type: cos, linear, log, exp, walk, sawtooth, square")
+	f.StringVar(&curveType, "type", "walk", "curve type: cos, linear, log, exp, walk, sawtooth, square, geo")
 	f.StringVar(&duration, "duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
 	f.StringVar(&step, "step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
 	f.StringVar(&device, "device", "device", "device/sensor name (or prefix when --devices > 1)")
@@ -549,6 +577,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.BoolVar(&realtime, "realtime", false, "emit one point per step interval using wall-clock time")
 	f.Int64Var(&seed, "seed", 0, "random seed for reproducible output (0 = random); batch mode only")
 	f.StringVar(&replayFile, "replay-file", "", "replay a JSON-lines file through the configured sink")
+	f.Float64Var(&rate, "rate", 0, "maximum points per second across all devices (0 = unlimited)")
 
 	// Periodic curves
 	f.Float64Var(&cosMin, "min", 10, "minimum value (cos, sawtooth, square)")
@@ -566,6 +595,13 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.Float64Var(&walkBias, "walk-bias", 0.0, "directional drift per step, negative = downward (walk)")
 	f.Float64Var(&walkMin, "walk-min", 15.0, "lower clamp; clamping disabled when walk-min == walk-max (walk)")
 	f.Float64Var(&walkMax, "walk-max", 35.0, "upper clamp; clamping disabled when walk-min == walk-max (walk)")
+
+	// Geo
+	f.Float64Var(&geoLat, "geo-lat", 48.8566, "starting latitude (geo)")
+	f.Float64Var(&geoLon, "geo-lon", 2.3522, "starting longitude (geo)")
+	f.Float64Var(&geoSpeed, "geo-speed", 10.0, "speed in m/s (geo)")
+	f.Float64Var(&geoBearing, "geo-bearing", 0.0, "initial bearing in degrees: 0=N, 90=E, 180=S, 270=W (geo)")
+	f.Float64Var(&geoDrift, "geo-drift", 15.0, "max random bearing change per step in degrees (geo)")
 
 	// Output
 	f.StringVar(&output, "output", "stdout", "output backend: stdout, webhook, nats, mqtt")
@@ -627,10 +663,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		name  string
 		flags []string
 	}{
-		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "realtime", "seed", "replay-file", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
+		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "realtime", "seed", "replay-file", "rate", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
 		{"Periodic curves (--type cos / sawtooth / square)", []string{"min", "max", "period", "duty-cycle"}},
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
+		{"Geo (--type geo)", []string{"geo-lat", "geo-lon", "geo-speed", "geo-bearing", "geo-drift"}},
 		{"Output", []string{"output", "format", "iso-time", "influx-measurement"}},
 		{"Template", []string{"payload-template", "payload-template-file"}},
 		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},

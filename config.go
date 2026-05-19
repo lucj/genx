@@ -24,6 +24,7 @@ type Config struct {
 	Realtime      *bool    `yaml:"realtime"`
 	Seed       *int64   `yaml:"seed"`
 	ReplayFile string   `yaml:"replay-file"`
+	Rate       *float64 `yaml:"rate"`
 
 	First     *float64 `yaml:"first"`
 	Last      *float64 `yaml:"last"`
@@ -37,6 +38,12 @@ type Config struct {
 	WalkBias  *float64 `yaml:"walk-bias"`
 	WalkMin   *float64 `yaml:"walk-min"`
 	WalkMax   *float64 `yaml:"walk-max"`
+	// Geo-specific
+	GeoLat     *float64 `yaml:"geo-lat"`
+	GeoLon     *float64 `yaml:"geo-lon"`
+	GeoSpeed   *float64 `yaml:"geo-speed"`
+	GeoBearing *float64 `yaml:"geo-bearing"`
+	GeoDrift   *float64 `yaml:"geo-drift"`
 
 	Output             string `yaml:"output"`
 	Format             string `yaml:"format"`
