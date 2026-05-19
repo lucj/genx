@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"text/template"
 	"time"
@@ -43,6 +44,11 @@ type sinkConfig struct {
 	kafkaPassword   string
 	kafkaTLS        bool
 	kafkaTLSInsecure bool
+	otlpEndpoint   string
+	otlpHTTP       bool
+	otlpHeaders    map[string]string
+	otlpInsecure   bool
+	otlpMetricName string
 	renderer        Renderer
 }
 
@@ -66,8 +72,10 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 		return NewFileSink(cfg.filePath, cfg.fileMaxBytes, cfg.fileMaxAge, cfg.renderer)
 	case "kafka":
 		return NewKafkaSink(cfg.kafkaBrokers, cfg.kafkaTopic, cfg.kafkaUsername, cfg.kafkaPassword, cfg.kafkaTLS, cfg.kafkaTLSInsecure, cfg.renderer)
+	case "otlp":
+		return NewOTLPSink(cfg.otlpEndpoint, cfg.otlpHTTP, cfg.otlpHeaders, cfg.otlpInsecure, cfg.otlpMetricName)
 	default:
-		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka)", cfg.output)
+		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka, otlp)", cfg.output)
 	}
 }
 
@@ -152,6 +160,13 @@ func main() {
 		kafkaPassword    string
 		kafkaTLS         bool
 		kafkaTLSInsecure bool
+
+		// OTLP
+		otlpEndpoint   string
+		otlpHTTP       bool
+		otlpHeaders    []string
+		otlpInsecure   bool
+		otlpMetricName string
 	)
 
 	var mqttDeviceCerts map[string]MqttDeviceCert
@@ -238,6 +253,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.KafkaPassword != "" && !changed("kafka-password")       { kafkaPassword = cfg.KafkaPassword }
 				if cfg.KafkaTLS != nil && !changed("kafka-tls")                { kafkaTLS = *cfg.KafkaTLS }
 				if cfg.KafkaTLSInsecure != nil && !changed("kafka-tls-insecure") { kafkaTLSInsecure = *cfg.KafkaTLSInsecure }
+				if cfg.OTLPEndpoint != "" && !changed("otlp-endpoint")           { otlpEndpoint = cfg.OTLPEndpoint }
+				if cfg.OTLPInsecure != nil && !changed("otlp-insecure")          { otlpInsecure = *cfg.OTLPInsecure }
+				if cfg.OTLPHTTP != nil && !changed("otlp-http")                  { otlpHTTP = *cfg.OTLPHTTP }
+				if cfg.OTLPMetricName != "" && !changed("otlp-metric")           { otlpMetricName = cfg.OTLPMetricName }
+				if len(cfg.OTLPHeaders) > 0 && !changed("otlp-header")           { otlpHeaders = cfg.OTLPHeaders }
 				if cfg.Format != "" && !changed("format")                            { format = cfg.Format }
 				if cfg.InfluxMeasurement != "" && !changed("influx-measurement")     { influxMeasurement = cfg.InfluxMeasurement }
 				if cfg.PayloadTemplate != "" && !changed("payload-template")          { payloadTemplate = cfg.PayloadTemplate }
@@ -257,6 +277,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					output = "file"
 				case cmd.Flags().Changed("kafka-brokers"):
 					output = "kafka"
+				case cmd.Flags().Changed("otlp-endpoint"):
+					output = "otlp"
 				}
 			}
 
@@ -317,6 +339,16 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				fileMaxAgeDur = time.Duration(ageSecs) * time.Second
 			}
 
+			// Parse --otlp-header key=value pairs into a map.
+			otlpHeaderMap := make(map[string]string, len(otlpHeaders))
+			for _, h := range otlpHeaders {
+				k, v, ok := strings.Cut(h, "=")
+				if !ok {
+					return fmt.Errorf("invalid --otlp-header %q: expected key=value", h)
+				}
+				otlpHeaderMap[k] = v
+			}
+
 			// Build the output sink.
 			sink, err := buildSink(sinkConfig{
 				output:          output,
@@ -347,6 +379,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				kafkaPassword:   kafkaPassword,
 				kafkaTLS:        kafkaTLS,
 				kafkaTLSInsecure: kafkaTLSInsecure,
+				otlpEndpoint:   otlpEndpoint,
+				otlpHTTP:       otlpHTTP,
+				otlpHeaders:    otlpHeaderMap,
+				otlpInsecure:   otlpInsecure,
+				otlpMetricName: otlpMetricName,
 				renderer:        renderer,
 			})
 			if err != nil {
@@ -560,6 +597,13 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.BoolVar(&kafkaTLS, "kafka-tls", false, "enable TLS (uses system cert pool)")
 	f.BoolVar(&kafkaTLSInsecure, "kafka-tls-insecure", false, "skip broker TLS certificate verification (testing only)")
 
+	// OTLP
+	f.StringVar(&otlpEndpoint, "otlp-endpoint", "localhost:4317", "OTLP collector endpoint (host:port)")
+	f.BoolVar(&otlpHTTP, "otlp-http", false, "use OTLP/HTTP instead of OTLP/gRPC")
+	f.StringArrayVar(&otlpHeaders, "otlp-header", nil, "header to add to OTLP requests, repeatable (e.g. x-api-key=abc)")
+	f.BoolVar(&otlpInsecure, "otlp-insecure", false, "disable TLS for the OTLP connection (plain-text)")
+	f.StringVar(&otlpMetricName, "otlp-metric", "genx", "base metric name; multi-field appends .<fieldname>")
+
 	// Annotate flags with groups for the help output.
 	groups := []struct {
 		name  string
@@ -576,6 +620,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		{"MQTT (--output mqtt)", []string{"mqtt-broker", "mqtt-topic", "mqtt-qos", "mqtt-client-id", "mqtt-user", "mqtt-password", "mqtt-ca-cert", "mqtt-cert", "mqtt-key", "mqtt-tls-insecure"}},
 		{"File (--output file)", []string{"file-path", "file-max-size", "file-max-age"}},
 		{"Kafka (--output kafka)", []string{"kafka-brokers", "kafka-topic", "kafka-username", "kafka-password", "kafka-tls", "kafka-tls-insecure"}},
+		{"OTLP (--output otlp)", []string{"otlp-endpoint", "otlp-http", "otlp-header", "otlp-insecure", "otlp-metric"}},
 	}
 
 	for _, g := range groups {

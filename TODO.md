@@ -14,19 +14,6 @@ message-broker setup.
 
 ## Medium Priority
 
-### OpenTelemetry (OTLP) Sink (`--output otlp`)
-Push generated metrics as OTLP `ExportMetricsServiceRequest` to any OTel collector
-(Grafana Agent, OpenTelemetry Collector, Honeycomb, Datadog, …).
-
-Uses `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc` (or the HTTP
-variant). Flags: `--otlp-endpoint`, `--otlp-headers`, `--otlp-insecure`. Each genx field
-becomes a gauge instrument; device name becomes the `device` resource attribute.
-
-Most relevant for teams already running an OTel collector and wanting realistic load on
-their observability stack.
-
----
-
 ### Scenario / Phase Scripting (`--scenario <file.yaml>`)
 Define a YAML file with a sequence of named phases, each overriding curve type, noise,
 anomaly rate, and duration:

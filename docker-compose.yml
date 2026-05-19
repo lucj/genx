@@ -397,3 +397,66 @@ services:
       --nats-url nats://nats-token:4222
       --nats-token mysecrettoken
       --type cos --duration 30s --step 5s --realtime
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry
+  # ---------------------------------------------------------------------------
+
+  # OTel Collector — receives OTLP gRPC/HTTP, exposes a Prometheus scrape endpoint.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: genx-otel-collector
+    profiles: [test-otlp]
+    volumes:
+      - ./examples/otlp/otelcol-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "9090:9090"   # Prometheus metrics endpoint
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:13133/"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  # Grafana — pre-configured with the Prometheus datasource and a genx dashboard.
+  # Open http://localhost:3000 (no login required).
+  grafana:
+    image: grafana/grafana:latest
+    container_name: genx-grafana
+    profiles: [test-otlp]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./examples/otlp/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  # Run: docker compose --profile test-otlp up
+  # genx sends a 3-device cosine fleet to the collector every 5 s.
+  # Watch the live chart at http://localhost:3000
+  test-otlp:
+    build: .
+    profiles: [test-otlp]
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    command: >
+      --output otlp
+      --otlp-endpoint otel-collector:4317
+      --otlp-insecure
+      --type cos
+      --devices 3
+      --noise 0.05
+      --duration 10m
+      --step 5s
+      --realtime

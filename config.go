@@ -73,6 +73,12 @@ type Config struct {
 	KafkaTLS         *bool  `yaml:"kafka-tls"`
 	KafkaTLSInsecure *bool  `yaml:"kafka-tls-insecure"`
 
+	OTLPEndpoint   string   `yaml:"otlp-endpoint"`
+	OTLPHTTP       *bool    `yaml:"otlp-http"`
+	OTLPHeaders    []string `yaml:"otlp-headers"`
+	OTLPInsecure   *bool    `yaml:"otlp-insecure"`
+	OTLPMetricName string   `yaml:"otlp-metric"`
+
 	PayloadTemplate     string `yaml:"payload-template"`
 	PayloadTemplateFile string `yaml:"payload-template-file"`
 
