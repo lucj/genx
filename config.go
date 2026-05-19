@@ -38,8 +38,9 @@ type Config struct {
 	WalkMin   *float64 `yaml:"walk-min"`
 	WalkMax   *float64 `yaml:"walk-max"`
 
-	Output  string `yaml:"output"`
-	Format  string `yaml:"format"`
+	Output             string `yaml:"output"`
+	Format             string `yaml:"format"`
+	InfluxMeasurement  string `yaml:"influx-measurement"`
 	WebhookURL   string `yaml:"webhook-url"`
 	WebhookToken string `yaml:"webhook-token"`
 	NatsURL      string `yaml:"nats-url"`

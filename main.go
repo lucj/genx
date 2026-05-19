@@ -108,9 +108,10 @@ func main() {
 		walkMax   float64
 
 		// Output
-		output  string
-		format  string
-		isoTime bool
+		output             string
+		format             string
+		isoTime            bool
+		influxMeasurement  string
 
 		// Payload template
 		payloadTemplate     string
@@ -238,6 +239,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.KafkaTLS != nil && !changed("kafka-tls")                { kafkaTLS = *cfg.KafkaTLS }
 				if cfg.KafkaTLSInsecure != nil && !changed("kafka-tls-insecure") { kafkaTLSInsecure = *cfg.KafkaTLSInsecure }
 				if cfg.Format != "" && !changed("format")                            { format = cfg.Format }
+				if cfg.InfluxMeasurement != "" && !changed("influx-measurement")     { influxMeasurement = cfg.InfluxMeasurement }
 				if cfg.PayloadTemplate != "" && !changed("payload-template")          { payloadTemplate = cfg.PayloadTemplate }
 				if cfg.PayloadTemplateFile != "" && !changed("payload-template-file") { payloadTemplateFile = cfg.PayloadTemplateFile }
 			}
@@ -266,10 +268,12 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 			switch format {
 			case "csv":
 				renderer = NewCSVRenderer(isoTime)
+			case "influx":
+				renderer = NewInfluxRenderer(influxMeasurement)
 			case "json", "":
 				// already set above
 			default:
-				return fmt.Errorf("unknown --format %q (use json or csv)", format)
+				return fmt.Errorf("unknown --format %q (use json, csv, or influx)", format)
 			}
 			if payloadTemplateFile != "" {
 				raw, err := os.ReadFile(payloadTemplateFile)
@@ -514,8 +518,9 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 
 	// Output
 	f.StringVar(&output, "output", "stdout", "output backend: stdout, webhook, nats, mqtt")
-	f.StringVar(&format, "format", "json", "output format for stdout/file sinks: json or csv")
+	f.StringVar(&format, "format", "json", "output format for stdout/file sinks: json, csv, or influx")
 	f.BoolVar(&isoTime, "iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
+	f.StringVar(&influxMeasurement, "influx-measurement", "genx", "InfluxDB measurement name (--format influx)")
 	f.StringVar(&payloadTemplate, "payload-template", "", "Go text/template string for JSON payload")
 	f.StringVar(&payloadTemplateFile, "payload-template-file", "", "path to a Go text/template file for JSON payload")
 
@@ -564,7 +569,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		{"Periodic curves (--type cos / sawtooth / square)", []string{"min", "max", "period", "duty-cycle"}},
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
-		{"Output", []string{"output", "format", "iso-time"}},
+		{"Output", []string{"output", "format", "iso-time", "influx-measurement"}},
 		{"Template", []string{"payload-template", "payload-template-file"}},
 		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},
 		{"NATS (--output nats)", []string{"nats-url", "nats-subject", "nats-user", "nats-password", "nats-token"}},

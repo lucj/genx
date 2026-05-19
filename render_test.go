@@ -156,6 +156,63 @@ func TestCSVRendererNilValue(t *testing.T) {
 	}
 }
 
+func TestInfluxRendererSingleField(t *testing.T) {
+	render := NewInfluxRenderer("sensors")
+	b, err := render(DataPoint{Device: "dev-1", Timestamp: 1000, Value: ptrF(22.5)})
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	got := string(b)
+	want := "sensors,device=dev-1 value=22.5 1000000000000"
+	if got != want {
+		t.Errorf("want %q, got %q", want, got)
+	}
+}
+
+func TestInfluxRendererMultiField(t *testing.T) {
+	render := NewInfluxRenderer("")
+	dp := DataPoint{
+		Device:    "room1",
+		Timestamp: 5000,
+		Fields:    map[string]float64{"humidity": 60.0, "temperature": 22.0},
+	}
+	b, err := render(dp)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	got := string(b)
+	// fields must be sorted
+	want := "genx,device=room1 humidity=60,temperature=22 5000000000000"
+	if got != want {
+		t.Errorf("want %q, got %q", want, got)
+	}
+}
+
+func TestInfluxRendererNilValue(t *testing.T) {
+	render := NewInfluxRenderer("genx")
+	b, err := render(DataPoint{Device: "dev", Timestamp: 1, Value: nil})
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	got := string(b)
+	if !strings.Contains(got, "value=0") {
+		t.Errorf("expected value=0 for nil Value, got %q", got)
+	}
+}
+
+func TestInfluxRendererEscaping(t *testing.T) {
+	render := NewInfluxRenderer("my measurement")
+	b, err := render(DataPoint{Device: "dev,1=a", Timestamp: 1, Value: ptrF(1.0)})
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	got := string(b)
+	// spaces in measurement and commas/equals in tag value must be escaped
+	if !strings.HasPrefix(got, `my\ measurement,device=dev\,1\=a`) {
+		t.Errorf("expected escaped line, got %q", got)
+	}
+}
+
 func TestTemplateRendererNilValue(t *testing.T) {
 	tmpl := template.Must(template.New("p").Parse(`{"device":"{{.Device}}","val":{{.Value}}}`))
 	render := NewTemplateRenderer(tmpl, false)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"text/template"
 	"time"
@@ -105,6 +106,57 @@ func NewCSVRenderer(isoTime bool) Renderer {
 		// csv.Writer appends \n after each record; trim the trailing one since
 		// sinks add their own line ending.
 		return bytes.TrimRight(buf.Bytes(), "\n"), nil
+	}
+}
+
+// NewInfluxRenderer returns a Renderer that emits InfluxDB line protocol.
+//
+// Format: <measurement>,device=<device> <field>=<value>[,...] <unix_nanoseconds>
+//
+// Single-field DataPoints use "value" as the field key. Multi-field DataPoints
+// use the sorted field names from Fields. Special characters in the measurement
+// name, tag values, and field keys are escaped per the line-protocol spec.
+func NewInfluxRenderer(measurement string) Renderer {
+	if measurement == "" {
+		measurement = "genx"
+	}
+	escapeMeasurement := func(s string) string {
+		s = strings.ReplaceAll(s, ",", `\,`)
+		s = strings.ReplaceAll(s, " ", `\ `)
+		return s
+	}
+	escapeTag := func(s string) string {
+		s = strings.ReplaceAll(s, ",", `\,`)
+		s = strings.ReplaceAll(s, "=", `\=`)
+		s = strings.ReplaceAll(s, " ", `\ `)
+		return s
+	}
+	m := escapeMeasurement(measurement)
+	return func(dp DataPoint) ([]byte, error) {
+		tag := escapeTag(dp.Device)
+		tsNano := dp.Timestamp * int64(time.Second)
+
+		var fieldSet string
+		if len(dp.Fields) > 0 {
+			names := make([]string, 0, len(dp.Fields))
+			for k := range dp.Fields {
+				names = append(names, k)
+			}
+			sort.Strings(names)
+			parts := make([]string, len(names))
+			for i, name := range names {
+				parts[i] = escapeTag(name) + "=" + strconv.FormatFloat(dp.Fields[name], 'f', -1, 64)
+			}
+			fieldSet = strings.Join(parts, ",")
+		} else {
+			val := 0.0
+			if dp.Value != nil {
+				val = *dp.Value
+			}
+			fieldSet = "value=" + strconv.FormatFloat(val, 'f', -1, 64)
+		}
+
+		return []byte(fmt.Sprintf("%s,device=%s %s %d", m, tag, fieldSet, tsNano)), nil
 	}
 }
 
