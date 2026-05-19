@@ -403,6 +403,7 @@ services:
   # ---------------------------------------------------------------------------
 
   # OTel Collector — receives OTLP gRPC/HTTP, exposes a Prometheus scrape endpoint.
+  # Note: the image is distroless (no shell), so no Docker health check is used.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: genx-otel-collector
@@ -413,11 +414,6 @@ services:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
       - "9090:9090"   # Prometheus metrics endpoint
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:13133/"]
-      interval: 5s
-      timeout: 3s
-      retries: 15
 
   # Grafana — pre-configured with the Prometheus datasource and a genx dashboard.
   # Open http://localhost:3000 (no login required).
@@ -433,8 +429,8 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
     depends_on:
-      otel-collector:
-        condition: service_healthy
+      - otel-collector
+    restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
       interval: 5s
@@ -448,8 +444,8 @@ services:
     build: .
     profiles: [test-otlp]
     depends_on:
-      otel-collector:
-        condition: service_healthy
+      - otel-collector
+    restart: on-failure
     command: >
       --output otlp
       --otlp-endpoint otel-collector:4317
