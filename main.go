@@ -52,6 +52,11 @@ type sinkConfig struct {
 	otlpMetricName string
 	prometheusPort   int
 	prometheusMetric string
+	influxdbURL      string
+	influxdbToken    string
+	influxdbOrg      string
+	influxdbBucket   string
+	influxMeasurement string
 	renderer        Renderer
 }
 
@@ -79,8 +84,10 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 		return NewOTLPSink(cfg.otlpEndpoint, cfg.otlpHTTP, cfg.otlpHeaders, cfg.otlpInsecure, cfg.otlpMetricName)
 	case "prometheus":
 		return NewPrometheusSink(cfg.prometheusPort, cfg.prometheusMetric)
+	case "influxdb":
+		return NewInfluxDBSink(cfg.influxdbURL, cfg.influxdbToken, cfg.influxdbOrg, cfg.influxdbBucket, cfg.influxMeasurement)
 	default:
-		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka, otlp, prometheus)", cfg.output)
+		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka, otlp, prometheus, influxdb)", cfg.output)
 	}
 }
 
@@ -186,6 +193,15 @@ func main() {
 		// Prometheus pull
 		prometheusPort   int
 		prometheusMetric string
+
+		// InfluxDB
+		influxdbURL    string
+		influxdbToken  string
+		influxdbOrg    string
+		influxdbBucket string
+
+		// Named devices
+		deviceNameList []string
 	)
 
 	var mqttDeviceCerts map[string]MqttDeviceCert
@@ -289,6 +305,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if cfg.InfluxMeasurement != "" && !changed("influx-measurement")     { influxMeasurement = cfg.InfluxMeasurement }
 				if cfg.CloudEventSource != "" && !changed("cloudevent-source")       { cloudEventSource = cfg.CloudEventSource }
 				if cfg.CloudEventType != "" && !changed("cloudevent-type")           { cloudEventType = cfg.CloudEventType }
+				if cfg.InfluxDBURL != "" && !changed("influxdb-url")                { influxdbURL = cfg.InfluxDBURL }
+				if cfg.InfluxDBToken != "" && !changed("influxdb-token")            { influxdbToken = cfg.InfluxDBToken }
+				if cfg.InfluxDBOrg != "" && !changed("influxdb-org")                { influxdbOrg = cfg.InfluxDBOrg }
+				if cfg.InfluxDBBucket != "" && !changed("influxdb-bucket")          { influxdbBucket = cfg.InfluxDBBucket }
+				if len(cfg.DeviceNames) > 0 && !changed("device-names")             { deviceNameList = cfg.DeviceNames }
 				if cfg.PayloadTemplate != "" && !changed("payload-template")          { payloadTemplate = cfg.PayloadTemplate }
 				if cfg.PayloadTemplateFile != "" && !changed("payload-template-file") { payloadTemplateFile = cfg.PayloadTemplateFile }
 			}
@@ -310,6 +331,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					output = "otlp"
 				case cmd.Flags().Changed("prometheus-port"):
 					output = "prometheus"
+				case cmd.Flags().Changed("influxdb-url"):
+					output = "influxdb"
 				}
 			}
 
@@ -390,6 +413,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				webhookURL:         webhookURL,
 				webhookToken:       webhookToken,
 				webhookContentType: webhookCT,
+				influxdbURL:        influxdbURL,
+				influxdbToken:      influxdbToken,
+				influxdbOrg:        influxdbOrg,
+				influxdbBucket:     influxdbBucket,
+				influxMeasurement:  influxMeasurement,
 				natsURL:         natsURL,
 				natsSubject:     natsSubject,
 				natsUser:        natsUser,
@@ -433,6 +461,22 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}()
 
+			// Wrap sink to count sends and print a summary when the run ends.
+			stats := &statsSink{inner: sink}
+			sink = stats
+			runStart := time.Now()
+			defer func() {
+				elapsed := time.Since(runStart)
+				pts := stats.sent.Load()
+				errs := stats.errors.Load()
+				rate := 0.0
+				if elapsed.Seconds() > 0 {
+					rate = float64(pts) / elapsed.Seconds()
+				}
+				fmt.Fprintf(os.Stderr, "sent %d points in %.1fs (%.1f pts/s, %d errors)\n",
+					pts, elapsed.Seconds(), rate, errs)
+			}()
+
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
@@ -443,10 +487,6 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					return fmt.Errorf("invalid --step: %w", err)
 				}
 				return runReplay(ctx, replayFile, sink, realtime, stepSeconds)
-			}
-
-			if devices < 1 {
-				return fmt.Errorf("--devices must be at least 1")
 			}
 
 			durationSeconds, err := GetSeconds(duration)
@@ -460,12 +500,22 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 
 			start := time.Now().Unix()
 
-			deviceNames := make([]string, devices)
-			for i := range deviceNames {
-				if devices == 1 {
-					deviceNames[i] = device
-				} else {
-					deviceNames[i] = fmt.Sprintf("%s-%d", device, i)
+			// Resolve device names: explicit list takes precedence over --device / --devices.
+			var deviceNames []string
+			if len(deviceNameList) > 0 {
+				deviceNames = deviceNameList
+				devices = len(deviceNames)
+			} else {
+				if devices < 1 {
+					return fmt.Errorf("--devices must be at least 1")
+				}
+				deviceNames = make([]string, devices)
+				for i := range deviceNames {
+					if devices == 1 {
+						deviceNames[i] = device
+					} else {
+						deviceNames[i] = fmt.Sprintf("%s-%d", device, i)
+					}
 				}
 			}
 
@@ -588,6 +638,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.Int64Var(&seed, "seed", 0, "random seed for reproducible output (0 = random); batch mode only")
 	f.StringVar(&replayFile, "replay-file", "", "replay a JSON-lines file through the configured sink")
 	f.Float64Var(&rate, "rate", 0, "maximum points per second across all devices (0 = unlimited)")
+	f.StringSliceVar(&deviceNameList, "device-names", nil, "explicit device names, comma-separated (overrides --device and --devices)")
 
 	// Periodic curves
 	f.Float64Var(&cosMin, "min", 10, "minimum value (cos, sawtooth, square)")
@@ -605,6 +656,12 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.Float64Var(&walkBias, "walk-bias", 0.0, "directional drift per step, negative = downward (walk)")
 	f.Float64Var(&walkMin, "walk-min", 15.0, "lower clamp; clamping disabled when walk-min == walk-max (walk)")
 	f.Float64Var(&walkMax, "walk-max", 35.0, "upper clamp; clamping disabled when walk-min == walk-max (walk)")
+
+	// InfluxDB
+	f.StringVar(&influxdbURL, "influxdb-url", "http://localhost:8086", "InfluxDB server URL (--output influxdb)")
+	f.StringVar(&influxdbToken, "influxdb-token", "", "InfluxDB API token (--output influxdb)")
+	f.StringVar(&influxdbOrg, "influxdb-org", "", "InfluxDB organisation (--output influxdb)")
+	f.StringVar(&influxdbBucket, "influxdb-bucket", "genx", "InfluxDB bucket (--output influxdb)")
 
 	// Geo
 	f.Float64Var(&geoLat, "geo-lat", 48.8566, "starting latitude (geo)")
@@ -675,11 +732,12 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		name  string
 		flags []string
 	}{
-		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "realtime", "seed", "replay-file", "rate", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
+		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "device-names", "realtime", "seed", "replay-file", "rate", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
 		{"Periodic curves (--type cos / sawtooth / square)", []string{"min", "max", "period", "duty-cycle"}},
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
 		{"Geo (--type geo)", []string{"geo-lat", "geo-lon", "geo-speed", "geo-bearing", "geo-drift"}},
+		{"InfluxDB (--output influxdb)", []string{"influxdb-url", "influxdb-token", "influxdb-org", "influxdb-bucket", "influx-measurement"}},
 		{"Output", []string{"output", "format", "iso-time", "influx-measurement", "cloudevent-source", "cloudevent-type"}},
 		{"Template", []string{"payload-template", "payload-template-file"}},
 		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},

@@ -14,8 +14,9 @@ type Config struct {
 	Type     string   `yaml:"type"`
 	Duration string   `yaml:"duration"`
 	Step     string   `yaml:"step"`
-	Device   string   `yaml:"device"`
-	Devices    *int     `yaml:"devices"`
+	Device      string   `yaml:"device"`
+	Devices     *int     `yaml:"devices"`
+	DeviceNames []string `yaml:"device-names"`
 	Spread     *float64 `yaml:"spread"`
 	Noise         *float64 `yaml:"noise"`
 	AnomalyRate   *float64 `yaml:"anomaly-rate"`
@@ -50,6 +51,10 @@ type Config struct {
 	InfluxMeasurement  string `yaml:"influx-measurement"`
 	CloudEventSource   string `yaml:"cloudevent-source"`
 	CloudEventType     string `yaml:"cloudevent-type"`
+	InfluxDBURL        string `yaml:"influxdb-url"`
+	InfluxDBToken      string `yaml:"influxdb-token"`
+	InfluxDBOrg        string `yaml:"influxdb-org"`
+	InfluxDBBucket     string `yaml:"influxdb-bucket"`
 	WebhookURL   string `yaml:"webhook-url"`
 	WebhookToken string `yaml:"webhook-token"`
 	NatsURL      string `yaml:"nats-url"`

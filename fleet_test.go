@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -219,6 +220,47 @@ func TestSpreadProducesDifferentValues(t *testing.T) {
 
 	if *sink.points[0].Value == *sink.points[1].Value {
 		t.Error("expected different values for devices with different scale factors")
+	}
+}
+
+// --- statsSink tests ---
+
+func TestStatsSinkCountsSends(t *testing.T) {
+	inner := &captureSink{}
+	s := &statsSink{inner: inner}
+
+	for i := 0; i < 5; i++ {
+		v := 1.0
+		s.Send(DataPoint{Device: "dev", Timestamp: int64(i), Value: &v})
+	}
+
+	if got := s.sent.Load(); got != 5 {
+		t.Errorf("expected 5 sent, got %d", got)
+	}
+	if got := s.errors.Load(); got != 0 {
+		t.Errorf("expected 0 errors, got %d", got)
+	}
+	if len(inner.points) != 5 {
+		t.Errorf("expected 5 points in inner sink, got %d", len(inner.points))
+	}
+}
+
+type errorSink struct{}
+
+func (e *errorSink) Send(DataPoint) error { return fmt.Errorf("send failed") }
+func (e *errorSink) Close() error         { return nil }
+
+func TestStatsSinkCountsErrors(t *testing.T) {
+	s := &statsSink{inner: &errorSink{}}
+	v := 1.0
+	s.Send(DataPoint{Device: "dev", Timestamp: 1, Value: &v})
+	s.Send(DataPoint{Device: "dev", Timestamp: 2, Value: &v})
+
+	if got := s.sent.Load(); got != 0 {
+		t.Errorf("expected 0 sent, got %d", got)
+	}
+	if got := s.errors.Load(); got != 2 {
+		t.Errorf("expected 2 errors, got %d", got)
 	}
 }
 

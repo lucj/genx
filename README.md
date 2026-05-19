@@ -87,7 +87,14 @@ genx --type cos --devices 3 --spread 0.1 --duration 1h --step 5m --realtime
 {"device":"device-2","timestamp":1715000000,"value":25.02}
 ```
 
-Use `--device` to set the name prefix (`--device sensor` → `sensor-0`, `sensor-1`, …).
+Use `--device` to set the name prefix (`--device sensor` → `sensor-0`, `sensor-1`, …). Use `--device-names` for explicit names:
+
+```bash
+genx --type cos --device-names "paris,london,berlin" --duration 1h --step 5m
+{"device":"paris","timestamp":1715000000,"value":24.10}
+{"device":"london","timestamp":1715000000,"value":23.57}
+{"device":"berlin","timestamp":1715000000,"value":25.02}
+```
 
 ## Noise & anomalies
 
@@ -99,6 +106,16 @@ genx --type cos --duration 1h --step 1m \
 - `--noise 0.05` — multiply each value by a random factor in `[0.95, 1.05]`
 - `--anomaly-rate 0.02` — ~2% of points become spikes or drops (magnitude set by `--anomaly-factor`)
 - `--dropout-rate 0.03` — ~3% of points are silently skipped
+
+## Run summary
+
+After every run, genx prints a one-line summary to stderr:
+
+```
+sent 360 points in 30.1s (11.9 pts/s, 0 errors)
+```
+
+This lets you verify throughput and catch send errors without digging through logs — particularly useful when load-testing a sink.
 
 ## Realtime mode & reproducibility
 
@@ -247,6 +264,21 @@ genx --type cos --duration 24h --step 1m --realtime \
 
 Rotated files are named with a UTC timestamp suffix: `data.20240506T120000.jsonl`.
 
+### InfluxDB
+
+Writes directly to an InfluxDB v2 instance using the line-protocol write API. No need to pipe through `influx write`.
+
+```bash
+genx --output influxdb \
+     --influxdb-url http://localhost:8086 \
+     --influxdb-token my-token \
+     --influxdb-org my-org \
+     --influxdb-bucket sensors \
+     --type cos --devices 3 --step 5s --realtime
+```
+
+Use `--influx-measurement` to set the measurement name (default: `genx`). Specifying `--influxdb-url` also implies `--output influxdb`.
+
 ### OpenTelemetry (OTLP)
 
 Pushes metrics as OTLP gauges. Each device name becomes a `device` attribute; multi-field payloads produce one gauge per field.
@@ -349,6 +381,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |
 | `--device` | `device` | Device name (or prefix when `--devices > 1`) |
 | `--devices` | `1` | Number of devices to simulate simultaneously |
+| `--device-names` | | Explicit device names, comma-separated (overrides `--device` and `--devices`) |
 | `--realtime` | false | Emit one point per step using real wall-clock time |
 | `--seed` | `0` | Fix the RNG seed for reproducible output (0 = random) |
 | `--replay-file` | | Path to a JSON-lines file to replay through the sink |
@@ -399,7 +432,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--output` | `stdout` | Sink: `stdout`, `webhook`, `nats`, `mqtt`, `kafka`, `file`, `otlp`, `prometheus` |
+| `--output` | `stdout` | Sink: `stdout`, `webhook`, `nats`, `mqtt`, `kafka`, `file`, `otlp`, `prometheus`, `influxdb` |
 | `--format` | `json` | Format for stdout/file: `json`, `csv`, `influx`, `cloudevent` |
 | `--iso-time` | false | Emit timestamp as ISO 8601 UTC string instead of Unix epoch |
 | `--influx-measurement` | `genx` | InfluxDB measurement name (`--format influx`) |
@@ -458,6 +491,16 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--file-path` | | Base path for file output (e.g. `data.jsonl`) |
 | `--file-max-size` | | Rotate when file reaches this size (e.g. `10MB`) |
 | `--file-max-age` | | Rotate after this duration (e.g. `1h`) |
+
+### InfluxDB (`--output influxdb`)
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--influxdb-url` | `http://localhost:8086` | InfluxDB server URL |
+| `--influxdb-token` | | API token |
+| `--influxdb-org` | | Organisation name |
+| `--influxdb-bucket` | `genx` | Bucket name |
+| `--influx-measurement` | `genx` | Measurement name |
 
 ### OTLP (`--output otlp`)
 
