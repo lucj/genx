@@ -162,6 +162,10 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				applyConfig(cfg, cmd.Flags().Changed, &v)
 			}
 
+			if err := validateParams(&v); err != nil {
+				return err
+			}
+
 			// Infer output sink from sink-specific flags when --output was not set.
 			if !cmd.Flags().Changed("output") {
 				switch {

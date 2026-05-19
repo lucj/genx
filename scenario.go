@@ -68,6 +68,10 @@ func resolvePhase(v *cliFlags, p PhaseConfig) (phaseParams, error) {
 	if p.AnomalyFactor != nil { pp.anomalyFactor = *p.AnomalyFactor }
 	if p.DropoutRate != nil  { pp.dropoutRate = *p.DropoutRate }
 
+	if err := validatePhaseParams(pp); err != nil {
+		return pp, err
+	}
+
 	if p.Duration == "" {
 		return pp, fmt.Errorf("duration is required")
 	}
