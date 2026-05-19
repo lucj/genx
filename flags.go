@@ -14,6 +14,7 @@ type cliFlags struct {
 	curveType      string
 	duration       string
 	step           string
+	count          int
 	device         string
 	devices        int
 	spread         float64
@@ -126,8 +127,9 @@ func registerFlags(cmd *cobra.Command, v *cliFlags) {
 	f.StringVar(&v.configFile, "config", "", "path to YAML config file (CLI flags take precedence)")
 	f.BoolVar(&v.generateConfig, "generate-config", false, "print a sample YAML config file and exit")
 	f.StringVar(&v.curveType, "type", "walk", "curve type: cos, linear, log, exp, walk, sawtooth, square, geo")
-	f.StringVar(&v.duration, "duration", "1d", "total duration (e.g. 2d, 6h, 30m)")
+	f.StringVar(&v.duration, "duration", "1d", "total duration (e.g. 2d, 6h, 30m); mutually exclusive with --count")
 	f.StringVar(&v.step, "step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
+	f.IntVar(&v.count, "count", 0, "number of points to emit per device (alternative to --duration; 0 = use --duration)")
 	f.StringVar(&v.device, "device", "device", "device/sensor name (or prefix when --devices > 1)")
 	f.IntVar(&v.devices, "devices", 1, "number of devices to simulate simultaneously")
 	f.Float64Var(&v.spread, "spread", 0.0, "per-device value spread as a ratio, e.g. 0.1 = ±10%")
@@ -257,6 +259,7 @@ func applyConfig(cfg *Config, changed func(string) bool, v *cliFlags) {
 	if cfg.Realtime != nil && !changed("realtime")             { v.realtime = *cfg.Realtime }
 	if cfg.Seed != nil && !changed("seed")                     { v.seed = *cfg.Seed }
 	if cfg.ReplayFile != "" && !changed("replay-file")         { v.replayFile = cfg.ReplayFile }
+	if cfg.Count != nil && !changed("count")                   { v.count = *cfg.Count }
 	if cfg.Rate != nil && !changed("rate")                     { v.rate = *cfg.Rate }
 
 	if cfg.First != nil && !changed("first")                   { v.linearFirst = *cfg.First }
@@ -334,7 +337,7 @@ type flagGroup struct {
 
 func flagGroups() []flagGroup {
 	return []flagGroup{
-		{"General", []string{"config", "generate-config", "type", "duration", "step", "device", "devices", "device-names", "realtime", "seed", "replay-file", "rate", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
+		{"General", []string{"config", "generate-config", "type", "duration", "count", "step", "device", "devices", "device-names", "realtime", "seed", "replay-file", "rate", "noise", "spread", "anomaly-rate", "anomaly-factor", "dropout-rate"}},
 		{"Periodic curves (--type cos / sawtooth / square)", []string{"min", "max", "period", "duty-cycle"}},
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},

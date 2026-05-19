@@ -284,6 +284,52 @@ func TestRateCapBatch(t *testing.T) {
 	}
 }
 
+func TestCountModeEmitsExactPoints(t *testing.T) {
+	sink := &captureSink{}
+	fn := func(x float64) float64 { return 1.0 }
+	fns := []func(float64) float64{fn}
+	count := 7
+	stepSeconds := 60
+	start := time.Now().Unix()
+	runBatch(newRand(), fns, sink, []string{"dev"}, start, count, stepSeconds, 0, 0)
+
+	if len(sink.points) != count {
+		t.Fatalf("expected %d points, got %d", count, len(sink.points))
+	}
+	// Timestamps should be continuous with the given step.
+	for i, dp := range sink.points {
+		expected := start + int64(i*stepSeconds)
+		if dp.Timestamp != expected {
+			t.Errorf("point %d: expected timestamp %d, got %d", i, expected, dp.Timestamp)
+		}
+	}
+}
+
+func TestCountModeFleet(t *testing.T) {
+	sink := &captureSink{}
+	count := 5
+	devices := []string{"sensor-0", "sensor-1", "sensor-2"}
+	fns := []func(float64) float64{
+		func(x float64) float64 { return 1.0 },
+		func(x float64) float64 { return 2.0 },
+		func(x float64) float64 { return 3.0 },
+	}
+	runBatch(newRand(), fns, sink, devices, time.Now().Unix(), count, 60, 0, 0)
+
+	if len(sink.points) != count*len(devices) {
+		t.Fatalf("expected %d points, got %d", count*len(devices), len(sink.points))
+	}
+	counts := map[string]int{}
+	for _, dp := range sink.points {
+		counts[dp.Device]++
+	}
+	for _, dev := range devices {
+		if counts[dev] != count {
+			t.Errorf("device %q: expected %d points, got %d", dev, count, counts[dev])
+		}
+	}
+}
+
 func TestRateCapZeroIsUnlimited(t *testing.T) {
 	sink := &captureSink{}
 	fn := func(x float64) float64 { return 1.0 }

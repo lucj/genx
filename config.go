@@ -22,6 +22,7 @@ type Config struct {
 	AnomalyRate   *float64 `yaml:"anomaly-rate"`
 	AnomalyFactor *float64 `yaml:"anomaly-factor"`
 	DropoutRate   *float64 `yaml:"dropout-rate"`
+	Count         *int     `yaml:"count"`
 	Realtime      *bool    `yaml:"realtime"`
 	Seed       *int64   `yaml:"seed"`
 	ReplayFile string   `yaml:"replay-file"`

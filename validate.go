@@ -33,6 +33,9 @@ func validateParams(v *cliFlags) error {
 	if v.prometheusPort < 1 || v.prometheusPort > 65535 {
 		return fmt.Errorf("prometheus-port must be between 1 and 65535, got %d", v.prometheusPort)
 	}
+	if v.count < 0 {
+		return fmt.Errorf("count must be >= 0, got %d", v.count)
+	}
 	return nil
 }
 

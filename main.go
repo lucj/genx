@@ -308,13 +308,24 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				return runReplay(ctx, v.replayFile, sink, v.realtime, stepSeconds)
 			}
 
-			durationSeconds, err := GetSeconds(v.duration)
-			if err != nil {
-				return fmt.Errorf("invalid --duration: %w", err)
-			}
 			stepSeconds, err := GetSeconds(v.step)
 			if err != nil {
 				return fmt.Errorf("invalid --step: %w", err)
+			}
+
+			var durationSeconds, itemCount int
+			if v.count > 0 {
+				if cmd.Flags().Changed("duration") {
+					return fmt.Errorf("--count and --duration are mutually exclusive")
+				}
+				itemCount = v.count
+				durationSeconds = v.count * stepSeconds
+			} else {
+				durationSeconds, err = GetSeconds(v.duration)
+				if err != nil {
+					return fmt.Errorf("invalid --duration: %w", err)
+				}
+				itemCount = durationSeconds / stepSeconds
 			}
 
 			start := time.Now().Unix()
@@ -340,8 +351,6 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					}
 				}
 			}
-
-			itemCount := durationSeconds / stepSeconds
 
 			// Scenario mode: phases executed in sequence.
 			if cfg != nil && len(cfg.Scenario) > 0 {

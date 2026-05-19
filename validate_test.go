@@ -129,3 +129,19 @@ func TestValidatePhaseNoise(t *testing.T) {
 		t.Error("expected error for noise < 0 in phase")
 	}
 }
+
+func TestValidateCountNegative(t *testing.T) {
+	v := defaultFlags()
+	v.count = -1
+	if err := validateParams(v); err == nil {
+		t.Error("expected error for count < 0")
+	}
+}
+
+func TestValidateCountZeroIsUnset(t *testing.T) {
+	v := defaultFlags()
+	v.count = 0
+	if err := validateParams(v); err != nil {
+		t.Errorf("count=0 should be valid (means use --duration), got: %v", err)
+	}
+}

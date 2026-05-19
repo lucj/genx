@@ -35,27 +35,6 @@ scenario:
 
 ---
 
-## P1 — Count mode (`--count`)
-
-**Why:** "Emit exactly 1000 points" is easier to reason about than computing `--duration` from `--step`. Common in load testing and CI fixtures where you want a fixed dataset size regardless of step interval.
-
-**Idea:** Add `--count N` as an alternative to `--duration`. When set, the run stops after N points per device regardless of elapsed time. `--duration` and `--count` are mutually exclusive.
-
-```
-# Emit exactly 500 points per device
-genx --type cos --devices 3 --count 500 --step 1s
-
-# In config file
-count: 500
-```
-
-**Notes:**
-- In batch mode, timestamps are still computed as `start + i * stepSeconds`.
-- In realtime mode, the run stops after N ticks per device.
-- `--count` and `--duration` should error if both are set.
-- Add `Count *int` to `Config` and a `count int` flag.
-
----
 
 ## P2 — Multiple output sinks simultaneously
 
