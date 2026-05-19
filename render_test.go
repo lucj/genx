@@ -214,7 +214,7 @@ func TestInfluxRendererEscaping(t *testing.T) {
 }
 
 func TestCloudEventRendererStructure(t *testing.T) {
-	render := NewCloudEventRenderer("/myapp", "com.example.sensor")
+	render := NewCloudEventRenderer("/myapp", "com.example.sensor", false)
 	dp := DataPoint{Device: "sensor-1", Timestamp: 1715000000, Value: ptrF(24.5)}
 
 	b, err := render(dp)
@@ -249,7 +249,7 @@ func TestCloudEventRendererStructure(t *testing.T) {
 }
 
 func TestCloudEventRendererDataPayload(t *testing.T) {
-	render := NewCloudEventRenderer("", "")
+	render := NewCloudEventRenderer("", "", false)
 	dp := DataPoint{Device: "dev", Timestamp: 1000, Value: ptrF(7.0)}
 
 	b, _ := render(dp)
@@ -269,7 +269,7 @@ func TestCloudEventRendererDataPayload(t *testing.T) {
 }
 
 func TestCloudEventRendererMultiField(t *testing.T) {
-	render := NewCloudEventRenderer("/fleet", "io.genx.measurement")
+	render := NewCloudEventRenderer("/fleet", "io.genx.measurement", false)
 	dp := DataPoint{
 		Device:    "truck-0",
 		Timestamp: 2000,
@@ -298,7 +298,7 @@ func TestCloudEventRendererMultiField(t *testing.T) {
 }
 
 func TestCloudEventRendererDefaults(t *testing.T) {
-	render := NewCloudEventRenderer("", "")
+	render := NewCloudEventRenderer("", "", false)
 	dp := DataPoint{Device: "x", Timestamp: 1}
 	b, _ := render(dp)
 
@@ -314,7 +314,7 @@ func TestCloudEventRendererDefaults(t *testing.T) {
 }
 
 func TestCloudEventRendererUniqueIDs(t *testing.T) {
-	render := NewCloudEventRenderer("", "")
+	render := NewCloudEventRenderer("", "", false)
 	dp := DataPoint{Device: "dev", Timestamp: 1, Value: ptrF(1.0)}
 	ids := map[string]bool{}
 	for i := 0; i < 20; i++ {
@@ -330,7 +330,7 @@ func TestCloudEventRendererUniqueIDs(t *testing.T) {
 }
 
 func TestCloudEventRendererTimestamp(t *testing.T) {
-	render := NewCloudEventRenderer("", "")
+	render := NewCloudEventRenderer("", "", false)
 	dp := DataPoint{Device: "dev", Timestamp: 0, Value: ptrF(1.0)} // Unix epoch
 	b, _ := render(dp)
 
@@ -339,6 +339,31 @@ func TestCloudEventRendererTimestamp(t *testing.T) {
 
 	if ce["time"] != "1970-01-01T00:00:00Z" {
 		t.Errorf("expected epoch timestamp, got %v", ce["time"])
+	}
+}
+
+func TestCloudEventRendererISOTime(t *testing.T) {
+	render := NewCloudEventRenderer("", "", true)
+	dp := DataPoint{Device: "dev", Timestamp: 0, Value: ptrF(1.0)} // Unix epoch
+
+	b, err := render(dp)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+
+	var ce map[string]any
+	json.Unmarshal(b, &ce)
+
+	data, ok := ce["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("ce.data should be a JSON object")
+	}
+	ts, ok := data["timestamp"].(string)
+	if !ok {
+		t.Fatalf("ce.data.timestamp should be a string when isoTime=true, got %T", data["timestamp"])
+	}
+	if ts != "1970-01-01T00:00:00Z" {
+		t.Errorf("expected ISO timestamp in data, got %q", ts)
 	}
 }
 

@@ -325,7 +325,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 			case "influx":
 				renderer = NewInfluxRenderer(influxMeasurement)
 			case "cloudevent":
-				renderer = NewCloudEventRenderer(cloudEventSource, cloudEventType)
+				renderer = NewCloudEventRenderer(cloudEventSource, cloudEventType, isoTime)
 				webhookCT = "application/cloudevents+json"
 			case "json", "":
 				// already set above

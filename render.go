@@ -169,15 +169,19 @@ func NewInfluxRenderer(measurement string) Renderer {
 //	eventType Reverse-DNS event type (e.g. "io.genx.measurement").
 //
 // The rendered bytes should be sent with Content-Type application/cloudevents+json.
-func NewCloudEventRenderer(source, eventType string) Renderer {
+func NewCloudEventRenderer(source, eventType string, isoTime bool) Renderer {
 	if source == "" {
 		source = "/genx"
 	}
 	if eventType == "" {
 		eventType = "io.genx.measurement"
 	}
+	inner := Renderer(JSONRenderer)
+	if isoTime {
+		inner = ISOJSONRenderer
+	}
 	return func(dp DataPoint) ([]byte, error) {
-		data, err := json.Marshal(dp)
+		data, err := inner(dp)
 		if err != nil {
 			return nil, err
 		}
