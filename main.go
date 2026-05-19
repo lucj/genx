@@ -503,6 +503,9 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 			// Resolve device names: explicit list takes precedence over --device / --devices.
 			var deviceNames []string
 			if len(deviceNameList) > 0 {
+				if cmd.Flags().Changed("devices") && devices != len(deviceNameList) {
+					return fmt.Errorf("--devices=%d conflicts with --device-names (%d names provided)", devices, len(deviceNameList))
+				}
 				deviceNames = deviceNameList
 				devices = len(deviceNames)
 			} else {
