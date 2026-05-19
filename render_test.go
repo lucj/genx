@@ -213,6 +213,135 @@ func TestInfluxRendererEscaping(t *testing.T) {
 	}
 }
 
+func TestCloudEventRendererStructure(t *testing.T) {
+	render := NewCloudEventRenderer("/myapp", "com.example.sensor")
+	dp := DataPoint{Device: "sensor-1", Timestamp: 1715000000, Value: ptrF(24.5)}
+
+	b, err := render(dp)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+
+	var ce map[string]any
+	if err := json.Unmarshal(b, &ce); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, b)
+	}
+
+	checks := map[string]string{
+		"specversion":     "1.0",
+		"type":            "com.example.sensor",
+		"datacontenttype": "application/json",
+	}
+	for field, want := range checks {
+		if got, ok := ce[field].(string); !ok || got != want {
+			t.Errorf("ce.%s: want %q, got %v", field, want, ce[field])
+		}
+	}
+	if source, _ := ce["source"].(string); source != "/myapp/sensor-1" {
+		t.Errorf("ce.source: want /myapp/sensor-1, got %v", source)
+	}
+	if id, _ := ce["id"].(string); len(id) == 0 {
+		t.Error("ce.id should not be empty")
+	}
+	if _, ok := ce["time"].(string); !ok {
+		t.Error("ce.time should be a string")
+	}
+}
+
+func TestCloudEventRendererDataPayload(t *testing.T) {
+	render := NewCloudEventRenderer("", "")
+	dp := DataPoint{Device: "dev", Timestamp: 1000, Value: ptrF(7.0)}
+
+	b, _ := render(dp)
+	var ce map[string]any
+	json.Unmarshal(b, &ce)
+
+	data, ok := ce["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("ce.data should be a JSON object, got %T", ce["data"])
+	}
+	if data["device"] != "dev" {
+		t.Errorf("ce.data.device: want dev, got %v", data["device"])
+	}
+	if data["value"] != 7.0 {
+		t.Errorf("ce.data.value: want 7.0, got %v", data["value"])
+	}
+}
+
+func TestCloudEventRendererMultiField(t *testing.T) {
+	render := NewCloudEventRenderer("/fleet", "io.genx.measurement")
+	dp := DataPoint{
+		Device:    "truck-0",
+		Timestamp: 2000,
+		Fields:    map[string]float64{"lat": 48.86, "lon": 2.35},
+	}
+
+	b, err := render(dp)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+
+	var ce map[string]any
+	json.Unmarshal(b, &ce)
+
+	data, ok := ce["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("ce.data should be a JSON object")
+	}
+	fields, ok := data["fields"].(map[string]any)
+	if !ok {
+		t.Fatalf("ce.data.fields should be a JSON object")
+	}
+	if fields["lat"] != 48.86 {
+		t.Errorf("ce.data.fields.lat: want 48.86, got %v", fields["lat"])
+	}
+}
+
+func TestCloudEventRendererDefaults(t *testing.T) {
+	render := NewCloudEventRenderer("", "")
+	dp := DataPoint{Device: "x", Timestamp: 1}
+	b, _ := render(dp)
+
+	var ce map[string]any
+	json.Unmarshal(b, &ce)
+
+	if src := ce["source"]; src != "/genx/x" {
+		t.Errorf("default source should be /genx/<device>, got %v", src)
+	}
+	if typ := ce["type"]; typ != "io.genx.measurement" {
+		t.Errorf("default type should be io.genx.measurement, got %v", typ)
+	}
+}
+
+func TestCloudEventRendererUniqueIDs(t *testing.T) {
+	render := NewCloudEventRenderer("", "")
+	dp := DataPoint{Device: "dev", Timestamp: 1, Value: ptrF(1.0)}
+	ids := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		b, _ := render(dp)
+		var ce map[string]any
+		json.Unmarshal(b, &ce)
+		id := ce["id"].(string)
+		if ids[id] {
+			t.Errorf("duplicate event ID generated: %s", id)
+		}
+		ids[id] = true
+	}
+}
+
+func TestCloudEventRendererTimestamp(t *testing.T) {
+	render := NewCloudEventRenderer("", "")
+	dp := DataPoint{Device: "dev", Timestamp: 0, Value: ptrF(1.0)} // Unix epoch
+	b, _ := render(dp)
+
+	var ce map[string]any
+	json.Unmarshal(b, &ce)
+
+	if ce["time"] != "1970-01-01T00:00:00Z" {
+		t.Errorf("expected epoch timestamp, got %v", ce["time"])
+	}
+}
+
 func TestTemplateRendererNilValue(t *testing.T) {
 	tmpl := template.Must(template.New("p").Parse(`{"device":"{{.Device}}","val":{{.Value}}}`))
 	render := NewTemplateRenderer(tmpl, false)

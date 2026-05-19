@@ -17,8 +17,9 @@ import (
 // sinkConfig carries the resolved parameters needed to construct a Sink.
 type sinkConfig struct {
 	output       string
-	webhookURL   string
-	webhookToken string
+	webhookURL         string
+	webhookToken       string
+	webhookContentType string
 	natsURL      string
 	natsSubject  string
 	natsUser     string
@@ -62,7 +63,7 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 		if cfg.webhookURL == "" {
 			return nil, fmt.Errorf("--webhook-url is required when --output is webhook")
 		}
-		return NewWebhookSink(cfg.webhookURL, cfg.webhookToken, cfg.renderer), nil
+		return NewWebhookSink(cfg.webhookURL, cfg.webhookToken, cfg.webhookContentType, cfg.renderer), nil
 	case "nats":
 		return NewNatsSink(cfg.natsURL, cfg.natsSubject, cfg.natsUser, cfg.natsPassword, cfg.natsToken, cfg.renderer)
 	case "mqtt":
@@ -132,6 +133,8 @@ func main() {
 		format             string
 		isoTime            bool
 		influxMeasurement  string
+		cloudEventSource   string
+		cloudEventType     string
 
 		// Payload template
 		payloadTemplate     string
@@ -284,6 +287,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if len(cfg.OTLPHeaders) > 0 && !changed("otlp-header")           { otlpHeaders = cfg.OTLPHeaders }
 				if cfg.Format != "" && !changed("format")                            { format = cfg.Format }
 				if cfg.InfluxMeasurement != "" && !changed("influx-measurement")     { influxMeasurement = cfg.InfluxMeasurement }
+				if cfg.CloudEventSource != "" && !changed("cloudevent-source")       { cloudEventSource = cfg.CloudEventSource }
+				if cfg.CloudEventType != "" && !changed("cloudevent-type")           { cloudEventType = cfg.CloudEventType }
 				if cfg.PayloadTemplate != "" && !changed("payload-template")          { payloadTemplate = cfg.PayloadTemplate }
 				if cfg.PayloadTemplateFile != "" && !changed("payload-template-file") { payloadTemplateFile = cfg.PayloadTemplateFile }
 			}
@@ -313,15 +318,19 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 			if isoTime {
 				renderer = ISOJSONRenderer
 			}
+			webhookCT := "application/json"
 			switch format {
 			case "csv":
 				renderer = NewCSVRenderer(isoTime)
 			case "influx":
 				renderer = NewInfluxRenderer(influxMeasurement)
+			case "cloudevent":
+				renderer = NewCloudEventRenderer(cloudEventSource, cloudEventType)
+				webhookCT = "application/cloudevents+json"
 			case "json", "":
 				// already set above
 			default:
-				return fmt.Errorf("unknown --format %q (use json, csv, or influx)", format)
+				return fmt.Errorf("unknown --format %q (use json, csv, influx, or cloudevent)", format)
 			}
 			if payloadTemplateFile != "" {
 				raw, err := os.ReadFile(payloadTemplateFile)
@@ -377,9 +386,10 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 
 			// Build the output sink.
 			sink, err := buildSink(sinkConfig{
-				output:          output,
-				webhookURL:      webhookURL,
-				webhookToken:    webhookToken,
+				output:             output,
+				webhookURL:         webhookURL,
+				webhookToken:       webhookToken,
+				webhookContentType: webhookCT,
 				natsURL:         natsURL,
 				natsSubject:     natsSubject,
 				natsUser:        natsUser,
@@ -608,6 +618,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 	f.StringVar(&format, "format", "json", "output format for stdout/file sinks: json, csv, or influx")
 	f.BoolVar(&isoTime, "iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
 	f.StringVar(&influxMeasurement, "influx-measurement", "genx", "InfluxDB measurement name (--format influx)")
+	f.StringVar(&cloudEventSource, "cloudevent-source", "/genx", "CloudEvents source URI (--format cloudevent); device name is appended automatically")
+	f.StringVar(&cloudEventType, "cloudevent-type", "io.genx.measurement", "CloudEvents type field (--format cloudevent)")
 
 	// Prometheus pull
 	f.IntVar(&prometheusPort, "prometheus-port", 9091, "port to expose /metrics on (--output prometheus)")
@@ -668,7 +680,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 		{"Linear curve (--type linear)", []string{"first", "last"}},
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
 		{"Geo (--type geo)", []string{"geo-lat", "geo-lon", "geo-speed", "geo-bearing", "geo-drift"}},
-		{"Output", []string{"output", "format", "iso-time", "influx-measurement"}},
+		{"Output", []string{"output", "format", "iso-time", "influx-measurement", "cloudevent-source", "cloudevent-type"}},
 		{"Template", []string{"payload-template", "payload-template-file"}},
 		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},
 		{"NATS (--output nats)", []string{"nats-url", "nats-subject", "nats-user", "nats-password", "nats-token"}},

@@ -48,6 +48,8 @@ type Config struct {
 	Output             string `yaml:"output"`
 	Format             string `yaml:"format"`
 	InfluxMeasurement  string `yaml:"influx-measurement"`
+	CloudEventSource   string `yaml:"cloudevent-source"`
+	CloudEventType     string `yaml:"cloudevent-type"`
 	WebhookURL   string `yaml:"webhook-url"`
 	WebhookToken string `yaml:"webhook-token"`
 	NatsURL      string `yaml:"nats-url"`

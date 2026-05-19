@@ -120,7 +120,7 @@ genx --replay-file recording.jsonl --output nats --nats-url nats://localhost:422
 
 ## Output formats
 
-Use `--format` to control serialisation for the `stdout` and `file` sinks.
+Use `--format` to control serialisation for the `stdout` and `file` sinks (and the `webhook` sink for CloudEvents).
 
 ### JSON (default)
 
@@ -138,6 +138,41 @@ device,1715000000,26.00
 ```
 
 Field columns are sorted alphabetically in multi-field mode. Combine with `--iso-time` for human-readable timestamps.
+
+### CloudEvents
+
+Wraps each data point in a [CloudEvents 1.0](https://cloudevents.io/) structured JSON envelope. Works with any CloudEvents-compatible consumer (Azure Event Grid, AWS EventBridge via HTTP, GCP Eventarc, Knative, Dapr, …) — no vendor SDK required.
+
+```bash
+genx --type cos --devices 3 --step 5s --realtime --format cloudevent
+```
+```json
+{
+  "specversion": "1.0",
+  "id": "304a2996-2fa4-4bf9-885b-0acb7c87dd32",
+  "source": "/genx/device-0",
+  "type": "io.genx.measurement",
+  "time": "2024-05-15T12:00:00Z",
+  "datacontenttype": "application/json",
+  "data": {"device":"device-0","timestamp":1715000000,"value":24.53}
+}
+```
+
+Pipe into a CloudEvents HTTP endpoint via the webhook sink — the `Content-Type` is set automatically to `application/cloudevents+json`:
+
+```bash
+genx --type cos --step 5s --realtime --format cloudevent \
+     --output webhook --webhook-url http://my-eventing-broker/default
+```
+
+Use `--cloudevent-source` and `--cloudevent-type` to customise the envelope:
+
+```bash
+genx --format cloudevent \
+     --cloudevent-source /plant/line-a \
+     --cloudevent-type com.acme.sensor.temperature \
+     --type cos --step 1m
+```
 
 ### InfluxDB line protocol
 
@@ -365,9 +400,11 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--output` | `stdout` | Sink: `stdout`, `webhook`, `nats`, `mqtt`, `kafka`, `file`, `otlp`, `prometheus` |
-| `--format` | `json` | Format for stdout/file: `json`, `csv`, `influx` |
+| `--format` | `json` | Format for stdout/file: `json`, `csv`, `influx`, `cloudevent` |
 | `--iso-time` | false | Emit timestamp as ISO 8601 UTC string instead of Unix epoch |
 | `--influx-measurement` | `genx` | InfluxDB measurement name (`--format influx`) |
+| `--cloudevent-source` | `/genx` | CloudEvents source URI; device name is appended automatically |
+| `--cloudevent-type` | `io.genx.measurement` | CloudEvents `type` field |
 | `--payload-template` | | Go `text/template` string for the JSON payload |
 | `--payload-template-file` | | Path to a Go `text/template` file for the JSON payload |
 

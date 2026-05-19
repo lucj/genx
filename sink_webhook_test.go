@@ -14,7 +14,7 @@ func TestWebhookSinkNoAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	sink := NewWebhookSink(srv.URL, "", JSONRenderer)
+	sink := NewWebhookSink(srv.URL, "", "", JSONRenderer)
 	v := 1.0
 	if err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: &v}); err != nil {
 		t.Fatalf("Send error: %v", err)
@@ -32,7 +32,7 @@ func TestWebhookSinkBearerToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	sink := NewWebhookSink(srv.URL, "mysecrettoken", JSONRenderer)
+	sink := NewWebhookSink(srv.URL, "mysecrettoken", "", JSONRenderer)
 	v := 1.0
 	if err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: &v}); err != nil {
 		t.Fatalf("Send error: %v", err)
@@ -48,7 +48,7 @@ func TestWebhookSinkNon2xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	sink := NewWebhookSink(srv.URL, "", JSONRenderer)
+	sink := NewWebhookSink(srv.URL, "", "", JSONRenderer)
 	v := 1.0
 	err := sink.Send(DataPoint{Device: "d", Timestamp: 1, Value: &v})
 	if err == nil {

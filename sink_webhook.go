@@ -8,20 +8,25 @@ import (
 	"time"
 )
 
-// WebhookSink sends each data point as a JSON POST request.
+// WebhookSink sends each data point as a POST request.
 type WebhookSink struct {
-	url    string
-	token  string
-	client *http.Client
-	render Renderer
+	url         string
+	token       string
+	contentType string
+	client      *http.Client
+	render      Renderer
 }
 
-func NewWebhookSink(url, token string, render Renderer) *WebhookSink {
+func NewWebhookSink(url, token, contentType string, render Renderer) *WebhookSink {
+	if contentType == "" {
+		contentType = "application/json"
+	}
 	return &WebhookSink{
-		url:    url,
-		token:  token,
-		render: render,
-		client: &http.Client{Timeout: 30 * time.Second},
+		url:         url,
+		token:       token,
+		contentType: contentType,
+		render:      render,
+		client:      &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -34,7 +39,7 @@ func (s *WebhookSink) Send(dp DataPoint) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", s.contentType)
 	if s.token != "" {
 		req.Header.Set("Authorization", "Bearer "+s.token)
 	}

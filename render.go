@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -158,6 +159,57 @@ func NewInfluxRenderer(measurement string) Renderer {
 
 		return []byte(fmt.Sprintf("%s,device=%s %s %d", m, tag, fieldSet, tsNano)), nil
 	}
+}
+
+// NewCloudEventRenderer returns a Renderer that wraps each DataPoint in a
+// CloudEvents 1.0 structured-content-mode JSON envelope.
+//
+//	source   URI-reference identifying the event producer (e.g. "/myapp").
+//	          The device name is appended as a path segment automatically.
+//	eventType Reverse-DNS event type (e.g. "io.genx.measurement").
+//
+// The rendered bytes should be sent with Content-Type application/cloudevents+json.
+func NewCloudEventRenderer(source, eventType string) Renderer {
+	if source == "" {
+		source = "/genx"
+	}
+	if eventType == "" {
+		eventType = "io.genx.measurement"
+	}
+	return func(dp DataPoint) ([]byte, error) {
+		data, err := json.Marshal(dp)
+		if err != nil {
+			return nil, err
+		}
+		type cloudEvent struct {
+			SpecVersion     string          `json:"specversion"`
+			ID              string          `json:"id"`
+			Source          string          `json:"source"`
+			Type            string          `json:"type"`
+			Time            string          `json:"time"`
+			DataContentType string          `json:"datacontenttype"`
+			Data            json.RawMessage `json:"data"`
+		}
+		ce := cloudEvent{
+			SpecVersion:     "1.0",
+			ID:              newEventID(),
+			Source:          source + "/" + dp.Device,
+			Type:            eventType,
+			Time:            time.Unix(dp.Timestamp, 0).UTC().Format(time.RFC3339),
+			DataContentType: "application/json",
+			Data:            json.RawMessage(data),
+		}
+		return json.Marshal(ce)
+	}
+}
+
+// newEventID returns a random UUID v4 string using crypto/rand.
+func newEventID() string {
+	var b [16]byte
+	_, _ = crand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 // NewTemplateRenderer returns a Renderer that executes tmpl and validates the
