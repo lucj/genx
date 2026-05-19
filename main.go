@@ -339,6 +339,17 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 
 			itemCount := durationSeconds / stepSeconds
 
+			// Scenario mode: phases executed in sequence.
+			if cfg != nil && len(cfg.Scenario) > 0 {
+				if v.replayFile != "" {
+					return fmt.Errorf("scenario mode is incompatible with --replay-file")
+				}
+				if len(cfg.Fields) > 0 {
+					return fmt.Errorf("scenario mode is incompatible with top-level fields")
+				}
+				return runScenario(ctx, rng, &v, cfg.Scenario, sink, deviceNames, start)
+			}
+
 			// Multi-field mode: only available via config file.
 			if cfg != nil && len(cfg.Fields) > 0 {
 				fieldFns := make(map[string]func(float64) float64, len(cfg.Fields))

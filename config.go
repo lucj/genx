@@ -103,6 +103,33 @@ type Config struct {
 	// Multi-field mode: when set, each key becomes a field in the payload.
 	// Curve flags (--type, --min, etc.) are ignored when Fields is present.
 	Fields map[string]FieldConfig `yaml:"fields"`
+
+	// Scenario mode: a list of phases executed in sequence.
+	// Incompatible with replay-file and top-level fields.
+	Scenario []PhaseConfig `yaml:"scenario"`
+}
+
+// PhaseConfig defines one phase of a scenario. Each phase inherits global
+// defaults and overrides only the fields it sets.
+type PhaseConfig struct {
+	Duration      string   `yaml:"duration"`
+	Type          string   `yaml:"type"`
+	Step          string   `yaml:"step"`
+	Min           *float64 `yaml:"min"`
+	Max           *float64 `yaml:"max"`
+	Period        string   `yaml:"period"`
+	DutyCycle     *float64 `yaml:"duty-cycle"`
+	First         *float64 `yaml:"first"`
+	Last          *float64 `yaml:"last"`
+	WalkStart     *float64 `yaml:"walk-start"`
+	WalkStep      *float64 `yaml:"walk-step"`
+	WalkBias      *float64 `yaml:"walk-bias"`
+	WalkMin       *float64 `yaml:"walk-min"`
+	WalkMax       *float64 `yaml:"walk-max"`
+	Noise         *float64 `yaml:"noise"`
+	AnomalyRate   *float64 `yaml:"anomaly-rate"`
+	AnomalyFactor *float64 `yaml:"anomaly-factor"`
+	DropoutRate   *float64 `yaml:"dropout-rate"`
 }
 
 // MqttDeviceCert holds the client cert/key pair for a single device.
