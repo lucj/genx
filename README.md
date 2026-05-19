@@ -322,6 +322,72 @@ Multi-field payloads produce one metric per field: `genx_temperature`, `genx_hum
 cd examples/otlp && docker compose --profile pull up
 ```
 
+## Scenario scripting
+
+A scenario is a sequence of phases executed in order. Each phase inherits global defaults and overrides only what it sets. This lets you simulate realistic device behaviour: normal operation, fault, recovery.
+
+```yaml
+# scenario.yaml
+device: env-sensor
+step: 30s
+
+scenario:
+  - duration: 10m
+    type: cos
+    min: 20
+    max: 25
+  - duration: 5m      # sensor fault — all points dropped
+    dropout-rate: 1.0
+  - duration: 10m     # recovery
+    type: cos
+    min: 20
+    max: 25
+```
+
+```bash
+genx --config scenario.yaml
+```
+
+Timestamps are continuous across phases. Geo walkers preserve position between phases. Scenario mode is incompatible with `--replay-file` and top-level `fields`.
+
+## Count mode
+
+Use `--count` to emit exactly N points instead of a time-based duration:
+
+```bash
+genx --type cos --count 100 --step 5m
+genx --config scenario.yaml --count 500
+```
+
+`--count` and `--duration` are mutually exclusive.
+
+## Verbose output
+
+`--verbose` prints one `[OK]` or `[KO]` line per point to stderr alongside the normal sink output. Useful for diagnosing delivery failures when testing a remote sink:
+
+```bash
+genx --type cos --step 5s --realtime --output webhook --webhook-url http://localhost:8080 --verbose
+[OK] {"device":"device","timestamp":1715000005,"value":24.81}
+[KO] {"device":"device","timestamp":1715000010,"value":24.12}  Post "http://localhost:8080": connection refused
+```
+
+## Validate config
+
+`genx validate` loads a config file and prints a dry-run summary without connecting to any sink or emitting data:
+
+```bash
+genx validate --config config.yaml
+✓ Config: config.yaml
+✓ Device: env-sensor
+✓ Output: stdout (format: json)
+✓ Mode: scenario (3 phases)
+  Phase 1: cos, 10m, step 30s → 20 pts/device
+  Phase 2: dropout (no points)
+  Phase 3: cos, 10m, step 30s → 20 pts/device
+✓ Total: ~40 points
+✓ All checks passed
+```
+
 ## Multi-field payloads
 
 ```yaml
@@ -391,6 +457,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--anomaly-rate` | `0` | Probability of injecting a spike or drop per point |
 | `--anomaly-factor` | `3` | Anomaly magnitude: spike = value × factor, drop = value / factor |
 | `--dropout-rate` | `0` | Probability of skipping a point entirely |
+| `--count` | | Emit exactly N points instead of using `--duration` (mutually exclusive) |
 
 ### Periodic curves (`--type cos` / `sawtooth` / `square`)
 
@@ -434,6 +501,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 |------|---------|-------------|
 | `--output` | `stdout` | Sink: `stdout`, `webhook`, `nats`, `mqtt`, `kafka`, `file`, `otlp`, `prometheus`, `influxdb` |
 | `--format` | `json` | Format for stdout/file: `json`, `csv`, `influx`, `cloudevent` |
+| `--verbose` | false | Print `[OK]`/`[KO] <payload>` to stderr for every point sent |
 | `--iso-time` | false | Emit timestamp as ISO 8601 UTC string instead of Unix epoch |
 | `--influx-measurement` | `genx` | InfluxDB measurement name (`--format influx`) |
 | `--cloudevent-source` | `/genx` | CloudEvents source URI; device name is appended automatically |

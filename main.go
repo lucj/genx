@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var version = "dev"
+
 // sinkConfig carries the resolved parameters needed to construct a Sink.
 type sinkConfig struct {
 	output             string
@@ -135,8 +137,9 @@ func main() {
 	var v cliFlags
 
 	rootCmd := &cobra.Command{
-		Use:   "genx",
-		Short: "IoT device simulator — generates synthetic time-series data",
+		Use:     "genx",
+		Version: version,
+		Short:   "IoT device simulator — generates synthetic time-series data",
 		Long: `genx emits synthetic measurements as JSON to test IoT pipelines, dashboards, and alerting systems.
 
 Use --config to load a YAML config file; CLI flags override any config value.`,
