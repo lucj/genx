@@ -280,6 +280,11 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}()
 
+			// Wrap sink with verbose logging when requested.
+			if v.verbose {
+				sink = &verboseSink{inner: sink, render: renderer, w: os.Stderr}
+			}
+
 			// Wrap sink to count sends and print a summary when the run ends.
 			stats := &statsSink{inner: sink}
 			sink = stats

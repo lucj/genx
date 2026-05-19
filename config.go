@@ -49,6 +49,7 @@ type Config struct {
 
 	Output             string `yaml:"output"`
 	Format             string `yaml:"format"`
+	Verbose            *bool  `yaml:"verbose"`
 	ISOTimestamp       *bool  `yaml:"iso-timestamp"`
 	InfluxMeasurement  string `yaml:"influx-measurement"`
 	CloudEventSource   string `yaml:"cloudevent-source"`

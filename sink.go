@@ -1,6 +1,10 @@
 package main
 
-import "sync/atomic"
+import (
+	"fmt"
+	"io"
+	"sync/atomic"
+)
 
 // DataPoint represents a single generated measurement.
 // In single-field mode, Value is set and Fields is nil.
@@ -36,3 +40,26 @@ func (s *statsSink) Send(dp DataPoint) error {
 }
 
 func (s *statsSink) Close() error { return s.inner.Close() }
+
+// verboseSink wraps any Sink and prints each payload with [OK] or [KO] to w.
+type verboseSink struct {
+	inner  Sink
+	render Renderer
+	w      io.Writer
+}
+
+func (s *verboseSink) Send(dp DataPoint) error {
+	err := s.inner.Send(dp)
+	payload, rerr := s.render(dp)
+	if rerr != nil {
+		payload = []byte("<render error>")
+	}
+	if err != nil {
+		fmt.Fprintf(s.w, "[KO] %s  %v\n", payload, err)
+	} else {
+		fmt.Fprintf(s.w, "[OK] %s\n", payload)
+	}
+	return err
+}
+
+func (s *verboseSink) Close() error { return s.inner.Close() }

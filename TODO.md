@@ -36,28 +36,6 @@ scenario:
 ---
 
 
-## P2 — Multiple output sinks simultaneously
-
-**Why:** Writing to both stdout and InfluxDB at the same time is useful for debugging a live run — you see the data and it gets recorded. Also useful for fan-out scenarios (MQTT + webhook).
-
-**Idea:** Allow `--output` to accept a comma-separated list, or add a `outputs` list in the config file. Each sink receives every point independently.
-
-```yaml
-outputs:
-  - stdout
-  - influxdb
-  - webhook
-
-influxdb-url: http://localhost:8086
-webhook-url: http://localhost:8080
-```
-
-**Notes:**
-- Implement a `fanoutSink` that wraps multiple `Sink` instances and calls `Send` on each.
-- Errors from individual sinks should be logged but not abort the others.
-- The `statsSink` wraps the fanout so the summary counts all sends across all sinks.
-
----
 
 ## P2 — Per-device scenario phases
 

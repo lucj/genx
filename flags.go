@@ -56,6 +56,7 @@ type cliFlags struct {
 	// Output / format
 	output            string
 	format            string
+	verbose           bool
 	isoTime           bool
 	influxMeasurement string
 	cloudEventSource  string
@@ -170,6 +171,7 @@ func registerFlags(cmd *cobra.Command, v *cliFlags) {
 	// Output / format
 	f.StringVar(&v.output, "output", "stdout", "output backend: stdout, webhook, nats, mqtt")
 	f.StringVar(&v.format, "format", "json", "output format for stdout/file sinks: json, csv, or influx")
+	f.BoolVar(&v.verbose, "verbose", false, "print each payload with [OK]/[KO] to stderr (useful when output is not stdout)")
 	f.BoolVar(&v.isoTime, "iso-time", false, "emit timestamp as ISO 8601 UTC string instead of Unix epoch")
 	f.StringVar(&v.influxMeasurement, "influx-measurement", "genx", "InfluxDB measurement name (--format influx)")
 	f.StringVar(&v.cloudEventSource, "cloudevent-source", "/genx", "CloudEvents source URI (--format cloudevent); device name is appended automatically")
@@ -281,6 +283,7 @@ func applyConfig(cfg *Config, changed func(string) bool, v *cliFlags) {
 
 	if cfg.Output != "" && !changed("output")                  { v.output = cfg.Output }
 	if cfg.Format != "" && !changed("format")                  { v.format = cfg.Format }
+	if cfg.Verbose != nil && !changed("verbose")               { v.verbose = *cfg.Verbose }
 	if cfg.ISOTimestamp != nil && !changed("iso-time")         { v.isoTime = *cfg.ISOTimestamp }
 	if cfg.InfluxMeasurement != "" && !changed("influx-measurement")     { v.influxMeasurement = cfg.InfluxMeasurement }
 	if cfg.CloudEventSource != "" && !changed("cloudevent-source")       { v.cloudEventSource = cfg.CloudEventSource }
@@ -343,7 +346,7 @@ func flagGroups() []flagGroup {
 		{"Random walk (--type walk)", []string{"walk-start", "walk-step", "walk-bias", "walk-min", "walk-max"}},
 		{"Geo (--type geo)", []string{"geo-lat", "geo-lon", "geo-speed", "geo-bearing", "geo-drift"}},
 		{"InfluxDB (--output influxdb)", []string{"influxdb-url", "influxdb-token", "influxdb-org", "influxdb-bucket", "influx-measurement"}},
-		{"Output", []string{"output", "format", "iso-time", "influx-measurement", "cloudevent-source", "cloudevent-type"}},
+		{"Output", []string{"output", "format", "verbose", "iso-time", "influx-measurement", "cloudevent-source", "cloudevent-type"}},
 		{"Template", []string{"payload-template", "payload-template-file"}},
 		{"Webhook (--output webhook)", []string{"webhook-url", "webhook-token"}},
 		{"NATS (--output nats)", []string{"nats-url", "nats-subject", "nats-user", "nats-password", "nats-token"}},
