@@ -1,0 +1,16 @@
+type: cos
+min: 18
+max: 26
+period: 12h
+device-names: [paris, london, tokyo, berlin, sydney]
+spread: 0.1
+noise: 0.02
+anomaly-rate: 0.01
+anomaly-factor: 4
+duration: 1h
+step: 30s
+realtime: true
+
+output: mqtt
+mqtt-broker: tcp://localhost:1883
+mqtt-topic: factory/temperature

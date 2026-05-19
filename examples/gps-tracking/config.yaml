@@ -1,0 +1,13 @@
+type: geo
+geo-lat: 48.8566
+geo-lon: 2.3522
+geo-speed: 15
+geo-bearing: 45
+geo-drift: 10
+device-names: [truck-01, truck-02, truck-03]
+step: 10s
+duration: 30m
+realtime: true
+
+output: webhook
+webhook-url: http://localhost:8080/positions

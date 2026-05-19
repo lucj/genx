@@ -1,0 +1,24 @@
+fields:
+  temperature:
+    type: cos
+    min: 18
+    max: 26
+    period: 12h
+  humidity:
+    type: cos
+    min: 40
+    max: 80
+    period: 8h
+
+device-names: [room-a, room-b, room-c]
+noise: 0.01
+step: 30s
+duration: 1h
+realtime: true
+
+format: cloudevent
+cloudevent-source: /buildings/floor1
+cloudevent-type: io.mycompany.sensor.reading
+
+output: webhook
+webhook-url: http://localhost:8080/events
