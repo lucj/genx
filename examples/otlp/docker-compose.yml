@@ -1,0 +1,58 @@
+services:
+
+  # OTel Collector — accepts OTLP gRPC (:4317) and HTTP (:4318),
+  # exposes a Prometheus scrape endpoint on :9090.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: genx-otel-collector
+    volumes:
+      - ./otelcol-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC  → genx --otlp-endpoint localhost:4317
+      - "4318:4318"   # OTLP HTTP  → genx --otlp-endpoint localhost:4318 --otlp-http
+      - "9090:9090"   # Prometheus scrape endpoint (used by Grafana)
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:13133/"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  # Grafana — auto-provisioned with the Prometheus datasource and the genx dashboard.
+  # Open http://localhost:3000  (anonymous access, no login required).
+  grafana:
+    image: grafana/grafana:latest
+    container_name: genx-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  # Optional: run genx inside Docker (builds from the repo root).
+  # Usage: docker compose --profile demo up
+  genx:
+    build: ../..
+    profiles: [demo]
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    command: >
+      --output otlp
+      --otlp-endpoint otel-collector:4317
+      --otlp-insecure
+      --type cos
+      --devices 3
+      --noise 0.05
+      --duration 10m
+      --step 5s
+      --realtime
