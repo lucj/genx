@@ -1,0 +1,22 @@
+device: sensor-1
+step: 30s
+realtime: false
+
+scenario:
+  - duration: 10m      # normal operation
+    type: cos
+    min: 20
+    max: 25
+
+  - duration: 5m       # overheat ramp
+    type: cos
+    min: 30
+    max: 50
+
+  - duration: 2m       # connectivity loss
+    dropout-rate: 1.0
+
+  - duration: 10m      # recovery
+    type: cos
+    min: 20
+    max: 25
