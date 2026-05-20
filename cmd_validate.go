@@ -41,14 +41,7 @@ func newValidateCmd() *cobra.Command {
 				if v.devices < 1 {
 					v.devices = 1
 				}
-				deviceNames = make([]string, v.devices)
-				for i := range deviceNames {
-					if v.devices == 1 {
-						deviceNames[i] = v.device
-					} else {
-						deviceNames[i] = fmt.Sprintf("%s-%d", v.device, i)
-					}
-				}
+				deviceNames = buildDeviceNames(v.device, v.devices)
 			}
 			printDeviceSummary(deviceNames)
 
@@ -165,6 +158,13 @@ func validateScenarioSummary(v *cliFlags, cfg *Config, globalStep, devices int) 
 			desc = "dropout (no points)"
 		case pp.curveType == "geo":
 			desc = fmt.Sprintf("geo, %s, step %s", phase.Duration, stepStr(pp.stepSeconds))
+		case len(phase.Fields) > 0:
+			names := make([]string, 0, len(phase.Fields))
+			for name := range phase.Fields {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			desc = fmt.Sprintf("multi-field [%s], %s, step %s → %d pts/device", strings.Join(names, ", "), phase.Duration, stepStr(pp.stepSeconds), pp.durationSeconds/pp.stepSeconds)
 		default:
 			desc = fmt.Sprintf("%s, %s, step %s → %d pts/device", pp.curveType, phase.Duration, stepStr(pp.stepSeconds), pp.durationSeconds/pp.stepSeconds)
 		}

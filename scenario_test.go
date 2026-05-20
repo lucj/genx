@@ -171,6 +171,49 @@ func TestRunScenarioGeoPhase(t *testing.T) {
 	}
 }
 
+func TestRunScenarioMultiFieldPhase(t *testing.T) {
+	sink := &captureSink{}
+	v := &cliFlags{curveType: "cos", cosPeriod: "1d", dutyCycle: 0.5, cosMin: 10, cosMax: 25, anomalyFactor: 3, step: "1m"}
+	phases := []PhaseConfig{
+		{Duration: "5m", Type: "cos", Min: ptr(20.0), Max: ptr(25.0)},
+		{Duration: "5m", Fields: map[string]FieldConfig{
+			"temperature": {Type: "cos", Min: ptr(18.0), Max: ptr(26.0)},
+			"humidity":    {Type: "cos", Min: ptr(40.0), Max: ptr(80.0)},
+		}},
+		{Duration: "5m", Type: "cos", Min: ptr(20.0), Max: ptr(25.0)},
+	}
+
+	err := runScenario(context.Background(), newRand(), v, phases, sink, []string{"sensor"}, time.Now().Unix())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 5 + 5 + 5 = 15 points for 1 device
+	if len(sink.points) != 15 {
+		t.Fatalf("expected 15 points, got %d", len(sink.points))
+	}
+
+	// Points 5–9 (phase 2) must carry Fields; the rest must carry Value.
+	for i, dp := range sink.points {
+		if i >= 5 && i < 10 {
+			if dp.Fields == nil {
+				t.Errorf("point %d: expected Fields for multi-field phase, got nil", i)
+				continue
+			}
+			if _, ok := dp.Fields["temperature"]; !ok {
+				t.Errorf("point %d: missing temperature field", i)
+			}
+			if _, ok := dp.Fields["humidity"]; !ok {
+				t.Errorf("point %d: missing humidity field", i)
+			}
+		} else {
+			if dp.Value == nil {
+				t.Errorf("point %d: expected Value for single-field phase, got nil", i)
+			}
+		}
+	}
+}
+
 func TestResolvePhaseInheritsGlobals(t *testing.T) {
 	v := &cliFlags{
 		curveType:     "walk",

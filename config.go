@@ -121,6 +121,7 @@ type Config struct {
 
 // PhaseConfig defines one phase of a scenario. Each phase inherits global
 // defaults and overrides only the fields it sets.
+// When Fields is non-empty the phase runs in multi-field mode regardless of Type.
 type PhaseConfig struct {
 	Duration      string   `yaml:"duration"`
 	Type          string   `yaml:"type"`
@@ -140,6 +141,7 @@ type PhaseConfig struct {
 	AnomalyRate   *float64 `yaml:"anomaly-rate"`
 	AnomalyFactor *float64 `yaml:"anomaly-factor"`
 	DropoutRate   *float64 `yaml:"dropout-rate"`
+	Fields        map[string]FieldConfig `yaml:"fields"`
 }
 
 // MqttDeviceCert holds the client cert/key pair for a single device.

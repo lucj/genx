@@ -174,10 +174,29 @@ func runScenario(ctx context.Context, rng *rand.Rand, v *cliFlags, phases []Phas
 		// respected regardless of pacing.
 		phaseStart := batchTs
 
-		if pp.curveType == "geo" {
+		switch {
+		case pp.curveType == "geo":
 			makers := geoMakers(rng, walkers, pp.stepSeconds)
 			dispatchRun(ctx, v.realtime, rng, makers, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
-		} else {
+		case len(phase.Fields) > 0:
+			fieldFns := make(map[string]func(float64) float64, len(phase.Fields))
+			for name, fc := range phase.Fields {
+				fn, err := buildFieldFn(rng, fc, phaseStart, pp.durationSeconds)
+				if err != nil {
+					return fmt.Errorf("scenario phase %d field %q: %w", i+1, name, err)
+				}
+				fieldFns[name] = fn
+			}
+			scales := make([]float64, len(deviceNames))
+			for j := range scales {
+				scales[j] = 1.0
+				if v.spread > 0 {
+					scales[j] = 1.0 + v.spread*(2*rng.Float64()-1)
+				}
+			}
+			makers := multiFieldMakers(rng, fieldFns, scales, pp.noise, pp.anomalyRate, pp.anomalyFactor)
+			dispatchRun(ctx, v.realtime, rng, makers, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
+		default:
 			fns, err := buildPhaseFns(rng, pp, len(deviceNames), v.spread, phaseStart)
 			if err != nil {
 				return fmt.Errorf("scenario phase %d: %w", i+1, err)

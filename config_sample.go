@@ -51,16 +51,21 @@ period: 1d
 # geo-drift: 15       # max random bearing change per step in degrees
 
 # ---------------------------------------------------------------------------
-# Scenario mode (phases executed in sequence; incompatible with fields)
+# Scenario mode (phases executed in sequence)
+# Each phase can be single-field, multi-field, geo, or a dropout.
 # ---------------------------------------------------------------------------
 # scenario:
-#   - duration: 10m
+#   - duration: 10m                      # single-field phase
 #     type: cos
 #     min: 20
 #     max: 25
-#   - duration: 5m      # sensor fault — all points dropped
+#   - duration: 5m                       # multi-field phase
+#     fields:
+#       temperature: { type: cos, min: 18, max: 26, period: 12h }
+#       humidity:    { type: cos, min: 40, max: 80, period: 8h }
+#   - duration: 5m                       # sensor fault — all points dropped
 #     dropout-rate: 1.0
-#   - duration: 10m     # recovery
+#   - duration: 10m                      # recovery
 #     type: cos
 #     min: 20
 #     max: 25
@@ -113,7 +118,7 @@ influx-measurement: genx   # InfluxDB measurement name (--format influx)
 # NATS (output: nats)
 # ---------------------------------------------------------------------------
 # nats-url: nats://localhost:4222
-# nats-subject: genx
+# nats-subject: genx                       # supports {{.Device}} template, e.g. sensors.{{.Device}}
 # nats-user: alice
 # nats-password: secret
 # nats-token: mysecrettoken
@@ -122,7 +127,7 @@ influx-measurement: genx   # InfluxDB measurement name (--format influx)
 # MQTT (output: mqtt)
 # ---------------------------------------------------------------------------
 # mqtt-broker: tcp://localhost:1883
-# mqtt-topic: genx
+# mqtt-topic: genx                         # supports {{.Device}} template, e.g. sensors/{{.Device}}
 # mqtt-qos: 0
 # mqtt-client-id: genx-client
 # mqtt-user: alice
@@ -145,7 +150,7 @@ influx-measurement: genx   # InfluxDB measurement name (--format influx)
 # Kafka (output: kafka)
 # ---------------------------------------------------------------------------
 # kafka-brokers: localhost:9092   # comma-separated broker addresses
-# kafka-topic: genx
+# kafka-topic: genx               # supports {{.Device}} template, e.g. sensors.{{.Device}}
 # kafka-username: alice
 # kafka-password: secret
 # kafka-tls: false
