@@ -66,10 +66,16 @@ func runRealtime(ctx context.Context, rng *rand.Rand, fns []func(float64) float6
 			defer ticker.Stop()
 			sent := 0
 			for {
-				select {
-				case <-ctx.Done():
+				// First point is emitted immediately; subsequent points wait for
+				// the ticker. Always check ctx so a pre-cancelled context is respected.
+				if sent > 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+					}
+				} else if ctx.Err() != nil {
 					return
-				case <-ticker.C:
 				}
 				if dropoutRate > 0 && rng.Float64() < dropoutRate {
 					sent++
@@ -131,10 +137,14 @@ func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]f
 			defer ticker.Stop()
 			sent := 0
 			for {
-				select {
-				case <-ctx.Done():
+				if sent > 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+					}
+				} else if ctx.Err() != nil {
 					return
-				case <-ticker.C:
 				}
 				if dropoutRate > 0 && rng.Float64() < dropoutRate {
 					sent++
@@ -199,10 +209,14 @@ func runRealtimeGeo(ctx context.Context, rng *rand.Rand, walkers []*GeoWalker, s
 			defer ticker.Stop()
 			sent := 0
 			for {
-				select {
-				case <-ctx.Done():
+				if sent > 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+					}
+				} else if ctx.Err() != nil {
 					return
-				case <-ticker.C:
 				}
 				if dropoutRate > 0 && rng.Float64() < dropoutRate {
 					sent++

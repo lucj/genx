@@ -484,13 +484,13 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--config` | | Path to YAML config file (CLI flags take precedence) |
 | `--generate-config` | | Print a sample YAML config file to stdout and exit |
 | `--type` | `walk` | Curve type: `cos`, `linear`, `log`, `exp`, `walk`, `sawtooth`, `square` |
-| `--duration` | `1d` | Total duration (e.g. `2d`, `6h`, `30m`) |
+| `--duration` | `1m` | Total duration (e.g. `2d`, `6h`, `30m`) |
 | `--from` | now | Start timestamp: ISO 8601 (`2024-01-01T00:00:00Z`), date (`2024-01-01`), or Unix epoch |
-| `--step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |
+| `--step` | `5s` | Sampling interval (e.g. `5m`, `10s`) |
 | `--device` | `device` | Device name (or prefix when `--devices > 1`) |
 | `--devices` | `1` | Number of devices to simulate simultaneously |
 | `--device-names` | | Explicit device names, comma-separated (overrides `--device` and `--devices`) |
-| `--realtime` | false | Emit one point per step using real wall-clock time |
+| `--realtime` | true | Emit one point per step using real wall-clock time |
 | `--seed` | `0` | Fix the RNG seed for reproducible output (0 = random) |
 | `--replay-file` | | Path to a JSON-lines file to replay through the sink |
 | `--rate` | `0` | Max points per second across all devices (0 = unlimited) |

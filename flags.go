@@ -131,9 +131,9 @@ func registerFlags(cmd *cobra.Command, v *cliFlags) {
 	f.StringVar(&v.configFile, "config", "", "path to YAML config file (CLI flags take precedence)")
 	f.BoolVar(&v.generateConfig, "generate-config", false, "print a sample YAML config file and exit")
 	f.StringVar(&v.curveType, "type", "walk", "curve type: cos, linear, log, exp, walk, sawtooth, square, geo")
-	f.StringVar(&v.duration, "duration", "1d", "total duration (e.g. 2d, 6h, 30m); mutually exclusive with --count")
+	f.StringVar(&v.duration, "duration", "1m", "total duration (e.g. 2d, 6h, 30m); mutually exclusive with --count")
 	f.StringVar(&v.from, "from", "", "start timestamp: ISO 8601 (2024-01-01T00:00:00Z), date (2024-01-01), or Unix epoch; defaults to now")
-	f.StringVar(&v.step, "step", "1h", "sampling interval (e.g. 1h, 5m, 10s)")
+	f.StringVar(&v.step, "step", "5s", "sampling interval (e.g. 1h, 5m, 10s)")
 	f.IntVar(&v.count, "count", 0, "number of points to emit per device (alternative to --duration; 0 = use --duration)")
 	f.StringVar(&v.device, "device", "device", "device/sensor name (or prefix when --devices > 1)")
 	f.IntVar(&v.devices, "devices", 1, "number of devices to simulate simultaneously")
@@ -142,7 +142,7 @@ func registerFlags(cmd *cobra.Command, v *cliFlags) {
 	f.Float64Var(&v.anomalyRate, "anomaly-rate", 0.0, "probability of injecting an anomaly per point, e.g. 0.02 = 2%")
 	f.Float64Var(&v.anomalyFactor, "anomaly-factor", 3.0, "anomaly magnitude: spike = value × factor, drop = value / factor")
 	f.Float64Var(&v.dropoutRate, "dropout-rate", 0.0, "probability of skipping a point, e.g. 0.05 = 5% dropout")
-	f.BoolVar(&v.realtime, "realtime", false, "emit one point per step interval using wall-clock time")
+	f.BoolVar(&v.realtime, "realtime", true, "emit one point per step interval using wall-clock time")
 	f.Int64Var(&v.seed, "seed", 0, "random seed for reproducible output (0 = random); batch mode only")
 	f.StringVar(&v.replayFile, "replay-file", "", "replay a JSON-lines file through the configured sink")
 	f.Float64Var(&v.rate, "rate", 0, "maximum points per second across all devices (0 = unlimited)")
@@ -373,8 +373,9 @@ func flagGroups() []flagGroup {
 func defaultCLIFlags() *cliFlags {
 	return &cliFlags{
 		curveType:         "walk",
-		duration:          "1d",
-		step:              "1h",
+		duration:          "1m",
+		step:              "5s",
+		realtime:          true,
 		device:            "device",
 		devices:           1,
 		anomalyFactor:     3.0,

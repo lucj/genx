@@ -10,9 +10,9 @@ const sampleConfig = `# genx sample configuration
 # Curve
 # ---------------------------------------------------------------------------
 type: cos        # cos | linear | log | exp | walk | sawtooth | square | geo
-duration: 1h     # total duration  — units: d, h, m, s  (e.g. 2d, 30m)
+duration: 1m     # total duration  — units: d, h, m, s  (e.g. 2d, 30m)
 # from: 2024-01-01T00:00:00Z  # start timestamp: ISO 8601, date, or Unix epoch; defaults to now
-step: 1m         # sampling interval
+step: 5s         # sampling interval
 device: sensor   # device name, or prefix when devices > 1
 devices: 1       # number of devices to simulate simultaneously
 # device-names: [paris, london, tokyo]  # explicit names (overrides device/devices)
@@ -21,7 +21,7 @@ noise: 0         # per-sample noise ratio          (0.05 = ±5%)
 anomaly-rate: 0  # probability of injecting a spike or drop per point (0.02 = 2%)
 anomaly-factor: 3 # anomaly magnitude: spike = value × factor, drop = value / factor
 dropout-rate: 0  # probability of skipping a point entirely (0.05 = 5%)
-realtime: false  # emit one point per step using the real wall clock
+realtime: true   # emit one point per step using the real wall clock
 seed: 0          # RNG seed for reproducible output (0 = random)
 rate: 0          # max points per second across all devices (0 = unlimited)
 # count: 100     # emit exactly N points instead of using duration
