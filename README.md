@@ -411,7 +411,7 @@ curl "http://localhost:8888/?n=3"
 
 The response is always a JSON array, even when only one point is available. The endpoint always returns JSON regardless of `--format`.
 
-`--realtime` is required for the server to stay alive. If omitted, genx enables it automatically and prints a note.
+The server stays alive until Ctrl-C regardless of `--realtime`. Without `--realtime`, all points are generated instantly and then served from the buffer until the process is stopped. With `--realtime`, points accumulate one per step as the server runs.
 
 ## Multi-field payloads
 

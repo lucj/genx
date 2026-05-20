@@ -16,6 +16,16 @@ import (
 
 var version = "dev"
 
+// waitIfHTTPServer blocks until ctx is cancelled when the output is http-server.
+// This keeps the server alive after generation completes so clients can still
+// query buffered points, regardless of whether --realtime was used.
+func waitIfHTTPServer(ctx context.Context, output string, port int) {
+	if output == "http-server" && ctx.Err() == nil {
+		log.Printf("HTTP server listening on :%d — press Ctrl-C to stop\n", port)
+		<-ctx.Done()
+	}
+}
+
 // sinkConfig carries the resolved parameters needed to construct a Sink.
 type sinkConfig struct {
 	output             string
@@ -193,14 +203,6 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				case cmd.Flags().Changed("influxdb-url"):
 					v.output = "influxdb"
 				}
-			}
-
-			// http-server only makes sense in realtime mode: the server shuts
-			// down as soon as the generator exits, so batch mode would tear it
-			// down before any client could connect.
-			if v.output == "http-server" && !v.realtime {
-				log.Println("note: --realtime enabled automatically with --output http-server")
-				v.realtime = true
 			}
 
 			renderer, webhookCT, err := buildRenderer(&v)
@@ -382,7 +384,9 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				if len(cfg.Fields) > 0 {
 					return fmt.Errorf("scenario mode is incompatible with top-level fields")
 				}
-				return runScenario(ctx, rng, &v, cfg.Scenario, sink, deviceNames, start)
+				err := runScenario(ctx, rng, &v, cfg.Scenario, sink, deviceNames, start)
+				waitIfHTTPServer(ctx, v.output, v.httpPort)
+				return err
 			}
 
 			// Multi-field mode: only available via config file.
@@ -407,6 +411,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				} else {
 					runBatchMulti(rng, fieldFns, scales, v.noise, v.anomalyRate, v.anomalyFactor, v.dropoutRate, sink, deviceNames, start, itemCount, stepSeconds, v.rate)
 				}
+				waitIfHTTPServer(ctx, v.output, v.httpPort)
 				return nil
 			}
 
@@ -421,6 +426,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				} else {
 					runBatchGeo(rng, walkers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
 				}
+				waitIfHTTPServer(ctx, v.output, v.httpPort)
 				return nil
 			}
 
@@ -479,6 +485,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 			} else {
 				runBatch(rng, fns, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
 			}
+
+			waitIfHTTPServer(ctx, v.output, v.httpPort)
 			return nil
 		},
 	}
