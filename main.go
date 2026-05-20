@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"text/template"
@@ -382,6 +383,8 @@ func run(cmd *cobra.Command, v *cliFlags) error {
 		deviceNames = buildDeviceNames(v.device, v.devices)
 	}
 
+	logRunConfig(v, cfg, itemCount, deviceNames)
+
 	// Scenario mode: phases executed in sequence.
 	if cfg != nil && len(cfg.Scenario) > 0 {
 		if v.replayFile != "" {
@@ -485,6 +488,54 @@ func run(cmd *cobra.Command, v *cliFlags) error {
 	dispatchRun(ctx, v.realtime, rng, makers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
 	waitIfHTTPServer(ctx, v.output, v.httpPort)
 	return nil
+}
+
+// logRunConfig prints the effective generation parameters to stderr before
+// data starts flowing, so the user can verify defaults without reading --help.
+func logRunConfig(v *cliFlags, cfg *Config, itemCount int, deviceNames []string) {
+	n := len(deviceNames)
+
+	if cfg != nil && len(cfg.Scenario) > 0 {
+		fmt.Fprintf(os.Stderr, "generating scenario (%d phases)  step=%s  devices=%d\n",
+			len(cfg.Scenario), v.step, n)
+		return
+	}
+
+	if cfg != nil && len(cfg.Fields) > 0 {
+		names := make([]string, 0, len(cfg.Fields))
+		for name := range cfg.Fields {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		fmt.Fprintf(os.Stderr, "generating %d points  fields=%s  step=%s  devices=%d\n",
+			itemCount, strings.Join(names, ","), v.step, n)
+		return
+	}
+
+	if v.curveType == "geo" {
+		fmt.Fprintf(os.Stderr, "generating %d points  type=geo  lat=%g  lon=%g  speed=%gm/s  bearing=%g°  drift=%g°  step=%s  devices=%d\n",
+			itemCount, v.geoLat, v.geoLon, v.geoSpeed, v.geoBearing, v.geoDrift, v.step, n)
+		return
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "generating %d points  type=%s", itemCount, v.curveType)
+	switch v.curveType {
+	case "cos", "sawtooth", "square":
+		fmt.Fprintf(&b, "  min=%g  max=%g  period=%s", v.cosMin, v.cosMax, v.cosPeriod)
+		if v.curveType == "square" {
+			fmt.Fprintf(&b, "  duty-cycle=%g", v.dutyCycle)
+		}
+	case "linear":
+		fmt.Fprintf(&b, "  first=%g  last=%g", v.linearFirst, v.linearLast)
+	case "walk":
+		fmt.Fprintf(&b, "  start=%g  walk-step=%g  bias=%g", v.walkStart, v.walkStep, v.walkBias)
+		if v.walkMin != v.walkMax {
+			fmt.Fprintf(&b, "  clamp=[%g,%g]", v.walkMin, v.walkMax)
+		}
+	}
+	fmt.Fprintf(&b, "  step=%s  devices=%d\n", v.step, n)
+	fmt.Fprint(os.Stderr, b.String())
 }
 
 func main() {
