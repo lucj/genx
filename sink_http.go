@@ -10,19 +10,50 @@ import (
 	"time"
 )
 
+// ringBuffer is a fixed-capacity FIFO that overwrites the oldest entry when full.
+type ringBuffer[T any] struct {
+	buf   []T
+	size  int
+	head  int // index of the oldest entry
+	count int // number of valid entries (0..size)
+}
+
+func newRingBuffer[T any](size int) *ringBuffer[T] {
+	return &ringBuffer[T]{buf: make([]T, size), size: size}
+}
+
+func (r *ringBuffer[T]) push(v T) {
+	pos := (r.head + r.count) % r.size
+	r.buf[pos] = v
+	if r.count < r.size {
+		r.count++
+	} else {
+		r.head = (r.head + 1) % r.size
+	}
+}
+
+// latest returns the n most recent items in chronological order.
+// If n exceeds the number of stored items, all stored items are returned.
+func (r *ringBuffer[T]) latest(n int) []T {
+	if n > r.count {
+		n = r.count
+	}
+	out := make([]T, n)
+	start := (r.head + r.count - n + r.size) % r.size
+	for i := range out {
+		out[i] = r.buf[(start+i)%r.size]
+	}
+	return out
+}
+
 // HTTPServerSink exposes the most recent N data points as a JSON array at GET /.
 // Points are stored in a fixed-size ring buffer; when full, the oldest entry is
 // overwritten. The optional ?n= query parameter limits the number of points
 // returned to at most n (must be ≤ buffer size).
 type HTTPServerSink struct {
-	mu    sync.RWMutex
-	buf   []DataPoint
-	size  int // ring buffer capacity
-	head  int // index of the oldest stored entry
-	count int // number of valid entries (0..size)
-
+	mu     sync.RWMutex
+	ring   *ringBuffer[DataPoint]
 	server *http.Server
-	errCh  chan error
 }
 
 func NewHTTPServerSink(port, bufSize int) (*HTTPServerSink, error) {
@@ -31,48 +62,25 @@ func NewHTTPServerSink(port, bufSize int) (*HTTPServerSink, error) {
 	}
 
 	s := &HTTPServerSink{
-		buf:   make([]DataPoint, bufSize),
-		size:  bufSize,
-		errCh: make(chan error, 1),
+		ring: newRingBuffer[DataPoint](bufSize),
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handlePoints)
 
-	s.server = &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+	srv, err := startHTTPServer(port, mux)
+	if err != nil {
+		return nil, fmt.Errorf("http-server: %w", err)
 	}
-
-	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.errCh <- err
-		}
-	}()
-
-	// Brief pause to surface immediate startup errors (e.g. port already in use).
-	select {
-	case err := <-s.errCh:
-		return nil, fmt.Errorf("http-server listener: %w", err)
-	case <-time.After(50 * time.Millisecond):
-	}
+	s.server = srv
 
 	return s, nil
 }
 
 func (s *HTTPServerSink) Send(dp DataPoint) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	pos := (s.head + s.count) % s.size
-	s.buf[pos] = dp
-	if s.count < s.size {
-		s.count++
-	} else {
-		s.head = (s.head + 1) % s.size
-	}
+	s.ring.push(dp)
+	s.mu.Unlock()
 	return nil
 }
 
@@ -83,18 +91,13 @@ func (s *HTTPServerSink) handlePoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.RLock()
-	n := s.count
+	n := s.ring.count
 	if qn := r.URL.Query().Get("n"); qn != "" {
 		if parsed, err := strconv.Atoi(qn); err == nil && parsed > 0 && parsed < n {
 			n = parsed
 		}
 	}
-	// Copy the n most recent points in chronological order.
-	points := make([]DataPoint, n)
-	start := (s.head + s.count - n + s.size) % s.size
-	for i := range points {
-		points[i] = s.buf[(start+i)%s.size]
-	}
+	points := s.ring.latest(n)
 	s.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")

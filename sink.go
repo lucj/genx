@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"strings"
 	"sync/atomic"
+	"text/template"
+	"time"
 )
 
 // DataPoint represents a single generated measurement.
@@ -63,3 +69,40 @@ func (s *verboseSink) Send(dp DataPoint) error {
 }
 
 func (s *verboseSink) Close() error { return s.inner.Close() }
+
+// startHTTPServer binds to the given port and starts an HTTP server.
+// The port is reserved before this function returns, so any bind error is
+// reported immediately rather than via a timing probe.
+// srv.Addr holds the actual bound address (useful when port == 0).
+func startHTTPServer(port int, handler http.Handler) (*http.Server, error) {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return nil, err
+	}
+	srv := &http.Server{
+		Addr:         ln.Addr().String(),
+		Handler:      handler,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	go func() { _ = srv.Serve(ln) }()
+	return srv, nil
+}
+
+// compileTopic returns a function that resolves a topic/subject pattern for a
+// given DataPoint. Patterns containing "{{" are treated as Go templates;
+// plain strings are returned as-is without any allocation.
+func compileTopic(pattern string) (func(DataPoint) string, error) {
+	if !strings.Contains(pattern, "{{") {
+		return func(DataPoint) string { return pattern }, nil
+	}
+	tmpl, err := template.New("topic").Parse(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid topic template %q: %w", pattern, err)
+	}
+	return func(dp DataPoint) string {
+		var buf bytes.Buffer
+		_ = tmpl.Execute(&buf, dp)
+		return buf.String()
+	}, nil
+}
