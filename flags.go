@@ -401,64 +401,88 @@ func defaultCLIFlags() *cliFlags {
 	}
 }
 
+// setupHelp installs a custom help function on rootCmd.
+//
+// Cobra's SetHelpFunc propagates to all descendants: a child with no helpFunc
+// walks up to the nearest ancestor that has one. We therefore install a single
+// function on the root and delegate to the appropriate renderer based on which
+// command is asking for help.
 func setupHelp(rootCmd *cobra.Command) {
-	f := rootCmd.Flags()
 	groups := flagGroups()
-	skippedDefaults := map[string]bool{"false": true, "0": true, "<nil>": true}
 
-	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		// For subcommands (validate, completion, …) use simple default rendering.
-		if cmd != rootCmd {
-			fmt.Fprintln(cmd.OutOrStdout(), cmd.Short)
-			fmt.Fprintln(cmd.OutOrStdout())
-			fmt.Fprintf(cmd.OutOrStdout(), "Usage:\n  %s\n\n", cmd.UseLine())
-			if cmd.HasAvailableSubCommands() {
-				fmt.Fprintf(cmd.OutOrStdout(), "Available Commands:\n")
-				for _, sub := range cmd.Commands() {
-					if !sub.Hidden {
-						fmt.Fprintf(cmd.OutOrStdout(), "  %-12s %s\n", sub.Name(), sub.Short)
-					}
-				}
-				fmt.Fprintln(cmd.OutOrStdout())
-			}
-			if cmd.HasAvailableFlags() {
-				fmt.Fprintf(cmd.OutOrStdout(), "Flags:\n%s\n", cmd.Flags().FlagUsages())
-			}
-			return
-		}
-
-		// Root command: custom grouped help.
-		fmt.Fprintln(cmd.OutOrStdout(), cmd.Long)
-		fmt.Fprintln(cmd.OutOrStdout())
-
-		if subs := rootCmd.Commands(); len(subs) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "Commands:\n")
-			for _, sub := range subs {
-				if !sub.Hidden {
-					fmt.Fprintf(cmd.OutOrStdout(), "  %-12s %s\n", sub.Name(), sub.Short)
-				}
-			}
-			fmt.Fprintln(cmd.OutOrStdout())
-		}
-
-		fmt.Fprintf(cmd.OutOrStdout(), "Usage:\n  genx [flags]\n\n")
-
-		for _, g := range groups {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s:\n", g.name)
-			for _, name := range g.flags {
-				fl := f.Lookup(name)
-				if fl == nil {
-					continue
-				}
-				if d := fl.DefValue; d != "" && !skippedDefaults[d] {
-					fmt.Fprintf(cmd.OutOrStdout(), "  --%-30s %s (default: %s)\n", fl.Name, fl.Usage, d)
-				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "  --%-30s %s\n", fl.Name, fl.Usage)
-				}
-			}
-			fmt.Fprintln(cmd.OutOrStdout())
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		if cmd == rootCmd {
+			printRootHelp(cmd, groups)
+		} else {
+			printSubCmdHelp(cmd)
 		}
 	})
+}
+
+// printRootHelp renders the custom grouped flag layout for the root command.
+func printRootHelp(cmd *cobra.Command, groups []flagGroup) {
+	skippedDefaults := map[string]bool{"false": true, "0": true, "<nil>": true}
+	f := cmd.Flags()
+	out := cmd.OutOrStdout()
+
+	fmt.Fprintln(out, cmd.Long)
+	fmt.Fprintln(out)
+
+	if subs := cmd.Commands(); len(subs) > 0 {
+		fmt.Fprintln(out, "Commands:")
+		for _, sub := range subs {
+			if !sub.Hidden {
+				fmt.Fprintf(out, "  %-12s %s\n", sub.Name(), sub.Short)
+			}
+		}
+		fmt.Fprintln(out)
+	}
+
+	fmt.Fprintf(out, "Usage:\n  genx [flags]\n\n")
+
+	for _, g := range groups {
+		fmt.Fprintf(out, "%s:\n", g.name)
+		for _, name := range g.flags {
+			fl := f.Lookup(name)
+			if fl == nil {
+				continue
+			}
+			if d := fl.DefValue; d != "" && !skippedDefaults[d] {
+				fmt.Fprintf(out, "  --%-30s %s (default: %s)\n", fl.Name, fl.Usage, d)
+			} else {
+				fmt.Fprintf(out, "  --%-30s %s\n", fl.Name, fl.Usage)
+			}
+		}
+		fmt.Fprintln(out)
+	}
+}
+
+// printSubCmdHelp renders standard help for subcommands (validate, completion, …).
+func printSubCmdHelp(cmd *cobra.Command) {
+	out := cmd.OutOrStdout()
+
+	desc := cmd.Long
+	if desc == "" {
+		desc = cmd.Short
+	}
+	fmt.Fprintln(out, desc)
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "Usage:\n  %s\n", cmd.UseLine())
+
+	if cmd.HasAvailableSubCommands() {
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Available Commands:")
+		for _, sub := range cmd.Commands() {
+			if !sub.Hidden {
+				fmt.Fprintf(out, "  %-12s %s\n", sub.Name(), sub.Short)
+			}
+		}
+	}
+
+	if cmd.HasAvailableFlags() {
+		fmt.Fprintln(out)
+		fmt.Fprintf(out, "Flags:\n%s\n", cmd.Flags().FlagUsages())
+	}
 }
 
 func registerCompletions(cmd *cobra.Command) {
