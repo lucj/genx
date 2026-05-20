@@ -386,6 +386,28 @@ genx --config scenario.yaml
 
 Timestamps are continuous across phases. Geo walkers preserve position between phases. Scenario mode is incompatible with `--replay-file` and top-level `fields`.
 
+A phase can also emit **multiple named fields** — set `fields` in that phase and each field gets its own curve:
+
+```yaml
+scenario:
+  - duration: 10m
+    type: cos
+    min: 20
+    max: 25
+  - duration: 5m          # multi-field phase
+    fields:
+      temperature: { type: cos, min: 18, max: 26, period: 12h }
+      humidity:    { type: cos, min: 40, max: 80, period: 8h }
+  - duration: 2m          # connectivity loss
+    dropout-rate: 1.0
+  - duration: 10m         # recovery
+    type: cos
+    min: 20
+    max: 25
+```
+
+During the multi-field phase each point carries a `fields` map instead of a single `value`. Single-field and multi-field phases can be freely mixed within the same scenario.
+
 ## Count mode
 
 Use `--count` to emit exactly N points instead of a time-based duration:

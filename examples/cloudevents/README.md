@@ -45,7 +45,7 @@ genx --config examples/cloudevents/config.yaml --output stdout
 ## Use ISO timestamps inside data
 
 ```
-genx --config examples/cloudevents/config.yaml --output stdout --iso-timestamp
+genx --config examples/cloudevents/config.yaml --output stdout --iso-time
 ```
 
 The `data.timestamp` field becomes an ISO 8601 string instead of a Unix integer.
@@ -57,7 +57,7 @@ The `data.timestamp` field becomes an ISO 8601 string instead of a Unix integer.
 | `--format cloudevent` | Wraps each payload in a CloudEvents 1.0 envelope |
 | `--cloudevent-source` | Sets the `source` field (appended with `/device-name`) |
 | `--cloudevent-type` | Sets the `type` field |
-| `--iso-timestamp` | Formats `data.timestamp` as RFC 3339 instead of Unix seconds |
+| `--iso-time` | Formats `data.timestamp` as RFC 3339 instead of Unix seconds |
 
 ## Routing by device
 

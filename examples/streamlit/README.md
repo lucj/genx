@@ -3,8 +3,6 @@
 An interactive browser UI that configures and runs `genx`, then plots the
 result as a live line chart.
 
-![screenshot placeholder](../../images/streamlit.png)
-
 ## Prerequisites
 
 - `genx` binary in your `PATH` (build with `go build -o genx .` from the
