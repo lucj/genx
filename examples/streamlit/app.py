@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(page_title="genx visualiser", layout="wide")
-st.title("genx — time-series data visualiser")
+st.title("data visualiser")
 
 # ---------------------------------------------------------------------------
 # Sidebar controls
