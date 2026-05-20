@@ -471,6 +471,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 
 	rootCmd.AddCommand(newValidateCmd())
 	registerFlags(rootCmd, &v)
+	registerCompletions(rootCmd)
 	setupHelp(rootCmd)
 
 	if err := rootCmd.Execute(); err != nil {

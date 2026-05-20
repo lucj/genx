@@ -401,14 +401,46 @@ func defaultCLIFlags() *cliFlags {
 	}
 }
 
-func setupHelp(cmd *cobra.Command) {
-	f := cmd.Flags()
+func setupHelp(rootCmd *cobra.Command) {
+	f := rootCmd.Flags()
 	groups := flagGroups()
 	skippedDefaults := map[string]bool{"false": true, "0": true, "<nil>": true}
 
-	cmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		// For subcommands (validate, completion, …) use simple default rendering.
+		if cmd != rootCmd {
+			fmt.Fprintln(cmd.OutOrStdout(), cmd.Short)
+			fmt.Fprintln(cmd.OutOrStdout())
+			fmt.Fprintf(cmd.OutOrStdout(), "Usage:\n  %s\n\n", cmd.UseLine())
+			if cmd.HasAvailableSubCommands() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Available Commands:\n")
+				for _, sub := range cmd.Commands() {
+					if !sub.Hidden {
+						fmt.Fprintf(cmd.OutOrStdout(), "  %-12s %s\n", sub.Name(), sub.Short)
+					}
+				}
+				fmt.Fprintln(cmd.OutOrStdout())
+			}
+			if cmd.HasAvailableFlags() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Flags:\n%s\n", cmd.Flags().FlagUsages())
+			}
+			return
+		}
+
+		// Root command: custom grouped help.
 		fmt.Fprintln(cmd.OutOrStdout(), cmd.Long)
 		fmt.Fprintln(cmd.OutOrStdout())
+
+		if subs := rootCmd.Commands(); len(subs) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Commands:\n")
+			for _, sub := range subs {
+				if !sub.Hidden {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %-12s %s\n", sub.Name(), sub.Short)
+				}
+			}
+			fmt.Fprintln(cmd.OutOrStdout())
+		}
+
 		fmt.Fprintf(cmd.OutOrStdout(), "Usage:\n  genx [flags]\n\n")
 
 		for _, g := range groups {
@@ -426,5 +458,17 @@ func setupHelp(cmd *cobra.Command) {
 			}
 			fmt.Fprintln(cmd.OutOrStdout())
 		}
+	})
+}
+
+func registerCompletions(cmd *cobra.Command) {
+	_ = cmd.RegisterFlagCompletionFunc("type", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"walk", "cos", "linear", "log", "exp", "sawtooth", "square", "geo"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	_ = cmd.RegisterFlagCompletionFunc("output", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"stdout", "webhook", "nats", "mqtt", "file", "kafka", "otlp", "prometheus", "influxdb"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	_ = cmd.RegisterFlagCompletionFunc("format", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"json", "csv", "influx", "cloudevent"}, cobra.ShellCompDirectiveNoFileComp
 	})
 }
