@@ -411,6 +411,8 @@ curl "http://localhost:8888/?n=3"
 
 The response is always a JSON array, even when only one point is available. The endpoint always returns JSON regardless of `--format`.
 
+`--realtime` is required for the server to stay alive. If omitted, genx enables it automatically and prints a note.
+
 ## Multi-field payloads
 
 ```yaml

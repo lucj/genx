@@ -195,6 +195,14 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}
 
+			// http-server only makes sense in realtime mode: the server shuts
+			// down as soon as the generator exits, so batch mode would tear it
+			// down before any client could connect.
+			if v.output == "http-server" && !v.realtime {
+				log.Println("note: --realtime enabled automatically with --output http-server")
+				v.realtime = true
+			}
+
 			renderer, webhookCT, err := buildRenderer(&v)
 			if err != nil {
 				return err

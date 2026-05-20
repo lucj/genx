@@ -1,11 +1,14 @@
 output: http-server
 http-port: 8888
-http-buffer: 10     # keep the last 10 points in memory
+http-buffer: 10   # keep the last 10 points in memory
+
+# realtime is required (and auto-enabled if omitted) — the server shuts down
+# as soon as the generator exits, so batch mode would tear it down immediately.
+realtime: true
 
 type: cos
 min: 18
 max: 26
 period: 1h
 step: 5s
-realtime: true
 device: sensor
