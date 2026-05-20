@@ -9,6 +9,6 @@ period: 1h
 step: 5s
 device: sensor
 
-# Add realtime: true to pace output to one point per step.
-# Without it, all points are generated instantly and then the server keeps
-# running until Ctrl-C, serving the buffered data.
+# realtime is enabled automatically when output is http-server so the buffer
+# updates on each step. Set realtime: false explicitly to pre-generate all
+# points instantly and then serve them from the buffer until Ctrl-C.

@@ -205,6 +205,12 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}
 
+			// http-server is a live-query sink: auto-enable realtime so the
+			// buffer updates on every step instead of being filled instantly.
+			if v.output == "http-server" && !v.realtime && !cmd.Flags().Changed("realtime") {
+				v.realtime = true
+			}
+
 			renderer, webhookCT, err := buildRenderer(&v)
 			if err != nil {
 				return err
