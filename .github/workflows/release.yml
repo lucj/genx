@@ -76,6 +76,7 @@ jobs:
           VER="${{ github.ref_name }}"
           CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VER}" -o genx-linux-amd64 .
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -ldflags="-s -w -X main.version=${VER}" -o genx-linux-arm64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=${VER}" -o genx-darwin-amd64 .
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version=${VER}" -o genx-darwin-arm64 .
 
       - name: Create GitHub release
@@ -85,6 +86,7 @@ jobs:
             --generate-notes \
             genx-linux-amd64 \
             genx-linux-arm64 \
+            genx-darwin-amd64 \
             genx-darwin-arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

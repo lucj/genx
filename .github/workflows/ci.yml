@@ -31,6 +31,7 @@ jobs:
       matrix:
         profile:
           - test-webhook
+          - test-cloudevent
           - test-mqtt
           - test-mqtt-auth
           - test-mqtt-tls
@@ -38,6 +39,7 @@ jobs:
           - test-nats
           - test-nats-userpass
           - test-nats-token
+          - test-kafka
     steps:
       - uses: actions/checkout@v4
 

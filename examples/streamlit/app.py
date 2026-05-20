@@ -26,8 +26,10 @@ with st.sidebar:
         c1, c2 = st.columns(2)
         min_val = c1.number_input("Min", value=10.0)
         max_val = c2.number_input("Max", value=25.0)
-        # Default period matches the default duration (1h) → one full cycle visible immediately.
-        period = st.selectbox("Period", ["15m", "1h", "6h", "12h", "1d"], index=1)
+        # cos: period = duration → one full cycle; sawtooth/square: short period → multiple cycles visible.
+        period_default = {"cos": 1, "sawtooth": 0, "square": 0}
+        period = st.selectbox("Period", ["15m", "1h", "6h", "12h", "1d"],
+                              index=period_default.get(curve_type, 1))
         if curve_type == "square":
             duty_cycle = st.slider("Duty cycle", 0.1, 0.9, 0.5, 0.05)
     elif curve_type == "linear":
