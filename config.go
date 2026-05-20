@@ -11,20 +11,20 @@ import (
 // Pointer fields distinguish "not set" from a zero value.
 // String fields use "" as the "not set" sentinel.
 type Config struct {
-	Type     string   `yaml:"type"`
-	Duration string   `yaml:"duration"`
-	From     string   `yaml:"from"`
-	Step     string   `yaml:"step"`
+	Type        string   `yaml:"type"`
+	Duration    string   `yaml:"duration"`
+	From        string   `yaml:"from"`
+	Step        string   `yaml:"step"`
 	Device      string   `yaml:"device"`
 	Devices     *int     `yaml:"devices"`
 	DeviceNames []string `yaml:"device-names"`
-	Spread     *float64 `yaml:"spread"`
-	Noise         *float64 `yaml:"noise"`
+	Spread      *float64 `yaml:"spread"`
+	Noise       *float64 `yaml:"noise"`
 	AnomalyRate   *float64 `yaml:"anomaly-rate"`
 	AnomalyFactor *float64 `yaml:"anomaly-factor"`
 	DropoutRate   *float64 `yaml:"dropout-rate"`
-	Count         *int     `yaml:"count"`
-	Realtime      *bool    `yaml:"realtime"`
+	Count      *int     `yaml:"count"`
+	Realtime   *bool    `yaml:"realtime"`
 	Seed       *int64   `yaml:"seed"`
 	ReplayFile string   `yaml:"replay-file"`
 	Rate       *float64 `yaml:"rate"`
@@ -35,41 +35,40 @@ type Config struct {
 	Max       *float64 `yaml:"max"`
 	Period    string   `yaml:"period"`
 	DutyCycle *float64 `yaml:"duty-cycle"`
-	// Walk-specific
+
 	WalkStart *float64 `yaml:"walk-start"`
 	WalkStep  *float64 `yaml:"walk-step"`
 	WalkBias  *float64 `yaml:"walk-bias"`
 	WalkMin   *float64 `yaml:"walk-min"`
 	WalkMax   *float64 `yaml:"walk-max"`
-	// Geo-specific
+
 	GeoLat     *float64 `yaml:"geo-lat"`
 	GeoLon     *float64 `yaml:"geo-lon"`
 	GeoSpeed   *float64 `yaml:"geo-speed"`
 	GeoBearing *float64 `yaml:"geo-bearing"`
 	GeoDrift   *float64 `yaml:"geo-drift"`
 
-	Output             string `yaml:"output"`
-	Format             string `yaml:"format"`
-	Verbose            *bool  `yaml:"verbose"`
-	ISOTimestamp       *bool  `yaml:"iso-time"`
-	InfluxMeasurement  string `yaml:"influx-measurement"`
-	CloudEventSource   string `yaml:"cloudevent-source"`
-	CloudEventType     string `yaml:"cloudevent-type"`
-	InfluxDBURL        string `yaml:"influxdb-url"`
-	InfluxDBToken      string `yaml:"influxdb-token"`
-	InfluxDBOrg        string `yaml:"influxdb-org"`
-	InfluxDBBucket     string `yaml:"influxdb-bucket"`
+	Output            string `yaml:"output"`
+	Format            string `yaml:"format"`
+	Verbose           *bool  `yaml:"verbose"`
+	ISOTimestamp      *bool  `yaml:"iso-time"`
+	InfluxMeasurement string `yaml:"influx-measurement"`
+	CloudEventSource  string `yaml:"cloudevent-source"`
+	CloudEventType    string `yaml:"cloudevent-type"`
+
 	WebhookURL   string `yaml:"webhook-url"`
 	WebhookToken string `yaml:"webhook-token"`
+
 	NatsURL      string `yaml:"nats-url"`
 	NatsSubject  string `yaml:"nats-subject"`
 	NatsUser     string `yaml:"nats-user"`
 	NatsPassword string `yaml:"nats-password"`
 	NatsToken    string `yaml:"nats-token"`
-	MqttBroker   string `yaml:"mqtt-broker"`
-	MqttTopic    string `yaml:"mqtt-topic"`
-	MqttQoS      *int   `yaml:"mqtt-qos"`
-	MqttClientID string `yaml:"mqtt-client-id"`
+
+	MqttBroker      string `yaml:"mqtt-broker"`
+	MqttTopic       string `yaml:"mqtt-topic"`
+	MqttQoS         *int   `yaml:"mqtt-qos"`
+	MqttClientID    string `yaml:"mqtt-client-id"`
 	MqttUser        string `yaml:"mqtt-user"`
 	MqttPassword    string `yaml:"mqtt-password"`
 	MqttCACert      string `yaml:"mqtt-ca-cert"`
@@ -102,6 +101,11 @@ type Config struct {
 	OTLPHeaders    []string `yaml:"otlp-headers"`
 	OTLPInsecure   *bool    `yaml:"otlp-insecure"`
 	OTLPMetricName string   `yaml:"otlp-metric"`
+
+	InfluxDBURL    string `yaml:"influxdb-url"`
+	InfluxDBToken  string `yaml:"influxdb-token"`
+	InfluxDBOrg    string `yaml:"influxdb-org"`
+	InfluxDBBucket string `yaml:"influxdb-bucket"`
 
 	PayloadTemplate     string `yaml:"payload-template"`
 	PayloadTemplateFile string `yaml:"payload-template-file"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"strings"
@@ -15,6 +16,20 @@ import (
 )
 
 var version = "dev"
+
+// buildDeviceNames generates device names from a prefix and count.
+// With count == 1 it returns [prefix]; otherwise [prefix-0, prefix-1, ...].
+func buildDeviceNames(prefix string, count int) []string {
+	names := make([]string, count)
+	for i := range names {
+		if count == 1 {
+			names[i] = prefix
+		} else {
+			names[i] = fmt.Sprintf("%s-%d", prefix, i)
+		}
+	}
+	return names
+}
 
 // waitIfHTTPServer blocks until ctx is cancelled when the output is http-server.
 // This keeps the server alive after generation completes so clients can still
@@ -147,6 +162,331 @@ func buildRenderer(v *cliFlags) (Renderer, string, error) {
 	return renderer, webhookCT, nil
 }
 
+func run(cmd *cobra.Command, v *cliFlags) error {
+	if cmd.Flags().NFlag() == 0 {
+		return cmd.Help()
+	}
+
+	if v.generateConfig {
+		printSampleConfig()
+		return nil
+	}
+
+	// Load config file and apply values for flags not explicitly set on the CLI.
+	var cfg *Config
+	if v.configFile != "" {
+		c, err := LoadConfig(v.configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		cfg = c
+		applyConfig(cfg, cmd.Flags().Changed, v)
+	}
+
+	if err := validateParams(v); err != nil {
+		return err
+	}
+
+	// Infer output sink from sink-specific flags when --output was not set.
+	if !cmd.Flags().Changed("output") {
+		switch {
+		case cmd.Flags().Changed("webhook-url"):
+			v.output = "webhook"
+		case cmd.Flags().Changed("nats-url"):
+			v.output = "nats"
+		case cmd.Flags().Changed("mqtt-broker"):
+			v.output = "mqtt"
+		case cmd.Flags().Changed("file-path"):
+			v.output = "file"
+		case cmd.Flags().Changed("kafka-brokers"):
+			v.output = "kafka"
+		case cmd.Flags().Changed("otlp-endpoint"):
+			v.output = "otlp"
+		case cmd.Flags().Changed("prometheus-port"):
+			v.output = "prometheus"
+		case cmd.Flags().Changed("influxdb-url"):
+			v.output = "influxdb"
+		}
+	}
+
+	// http-server is a live-query sink: auto-enable realtime so the
+	// buffer updates on every step instead of being filled instantly.
+	if v.output == "http-server" && !v.realtime && !cmd.Flags().Changed("realtime") {
+		v.realtime = true
+	}
+
+	renderer, webhookCT, err := buildRenderer(v)
+	if err != nil {
+		return err
+	}
+
+	// Initialise RNG.
+	rng := newRand()
+	if v.seed != 0 {
+		rng = seededRand(uint64(v.seed))
+	}
+
+	// Parse file sink rotation parameters.
+	var fileMaxBytes int64
+	if v.fileMaxSize != "" {
+		fileMaxBytes, err = ParseSize(v.fileMaxSize)
+		if err != nil {
+			return fmt.Errorf("invalid --file-max-size: %w", err)
+		}
+	}
+	var fileMaxAgeDur time.Duration
+	if v.fileMaxAge != "" {
+		ageSecs, err := GetSeconds(v.fileMaxAge)
+		if err != nil {
+			return fmt.Errorf("invalid --file-max-age: %w", err)
+		}
+		fileMaxAgeDur = time.Duration(ageSecs) * time.Second
+	}
+
+	// Parse --otlp-header key=value pairs into a map.
+	otlpHeaderMap := make(map[string]string, len(v.otlpHeaders))
+	for _, h := range v.otlpHeaders {
+		k, val, ok := strings.Cut(h, "=")
+		if !ok {
+			return fmt.Errorf("invalid --otlp-header %q: expected key=value", h)
+		}
+		otlpHeaderMap[k] = val
+	}
+
+	// Build the output sink.
+	sink, err := buildSink(sinkConfig{
+		output:             v.output,
+		webhookURL:         v.webhookURL,
+		webhookToken:       v.webhookToken,
+		webhookContentType: webhookCT,
+		influxdbURL:        v.influxdbURL,
+		influxdbToken:      v.influxdbToken,
+		influxdbOrg:        v.influxdbOrg,
+		influxdbBucket:     v.influxdbBucket,
+		influxMeasurement:  v.influxMeasurement,
+		natsURL:            v.natsURL,
+		natsSubject:        v.natsSubject,
+		natsUser:           v.natsUser,
+		natsPassword:       v.natsPassword,
+		natsToken:          v.natsToken,
+		mqttBroker:         v.mqttBroker,
+		mqttTopic:          v.mqttTopic,
+		mqttClientID:       v.mqttClientID,
+		mqttQoS:            v.mqttQoS,
+		mqttUser:           v.mqttUser,
+		mqttPassword:       v.mqttPassword,
+		mqttCACert:         v.mqttCACert,
+		mqttCert:           v.mqttCert,
+		mqttKey:            v.mqttKey,
+		mqttTLSInsecure:    v.mqttTLSInsecure,
+		mqttDeviceCerts:    v.mqttDeviceCerts,
+		filePath:           v.filePath,
+		fileMaxBytes:       fileMaxBytes,
+		fileMaxAge:         fileMaxAgeDur,
+		kafkaBrokers:       v.kafkaBrokers,
+		kafkaTopic:         v.kafkaTopic,
+		kafkaUsername:      v.kafkaUsername,
+		kafkaPassword:      v.kafkaPassword,
+		kafkaTLS:           v.kafkaTLS,
+		kafkaTLSInsecure:   v.kafkaTLSInsecure,
+		otlpEndpoint:       v.otlpEndpoint,
+		otlpHTTP:           v.otlpHTTP,
+		otlpHeaders:        otlpHeaderMap,
+		otlpInsecure:       v.otlpInsecure,
+		otlpMetricName:     v.otlpMetricName,
+		prometheusPort:     v.prometheusPort,
+		prometheusMetric:   v.prometheusMetric,
+		httpPort:           v.httpPort,
+		httpBuffer:         v.httpBuffer,
+		renderer:           renderer,
+	})
+	if err != nil {
+		return fmt.Errorf("sink: %w", err)
+	}
+	defer func() {
+		if err := sink.Close(); err != nil {
+			log.Printf("sink close error: %v", err)
+		}
+	}()
+
+	// Wrap sink with verbose logging when requested.
+	if v.verbose {
+		sink = &verboseSink{inner: sink, render: renderer, w: os.Stderr}
+	}
+
+	// Wrap sink to count sends and print a summary when the run ends.
+	stats := &statsSink{inner: sink}
+	sink = stats
+	runStart := time.Now()
+	defer func() {
+		elapsed := time.Since(runStart)
+		pts := stats.sent.Load()
+		errs := stats.errors.Load()
+		rate := 0.0
+		if elapsed.Seconds() > 0 {
+			rate = float64(pts) / elapsed.Seconds()
+		}
+		fmt.Fprintf(os.Stderr, "sent %d points in %.1fs (%.1f pts/s, %d errors)\n",
+			pts, elapsed.Seconds(), rate, errs)
+	}()
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	// Replay mode.
+	if v.replayFile != "" {
+		stepSeconds, err := GetSeconds(v.step)
+		if err != nil {
+			return fmt.Errorf("invalid --step: %w", err)
+		}
+		return runReplay(ctx, v.replayFile, sink, v.realtime, stepSeconds)
+	}
+
+	stepSeconds, err := GetSeconds(v.step)
+	if err != nil {
+		return fmt.Errorf("invalid --step: %w", err)
+	}
+
+	var durationSeconds, itemCount int
+	if v.count > 0 {
+		if cmd.Flags().Changed("duration") {
+			return fmt.Errorf("--count and --duration are mutually exclusive")
+		}
+		itemCount = v.count
+		durationSeconds = v.count * stepSeconds
+	} else {
+		durationSeconds, err = GetSeconds(v.duration)
+		if err != nil {
+			return fmt.Errorf("invalid --duration: %w", err)
+		}
+		itemCount = durationSeconds / stepSeconds
+	}
+
+	start, err := ParseFromTime(v.from)
+	if err != nil {
+		return fmt.Errorf("--from: %w", err)
+	}
+
+	// Resolve device names: explicit list takes precedence over --device / --devices.
+	var deviceNames []string
+	if len(v.deviceNameList) > 0 {
+		if cmd.Flags().Changed("devices") && v.devices != len(v.deviceNameList) {
+			return fmt.Errorf("--devices=%d conflicts with --device-names (%d names provided)", v.devices, len(v.deviceNameList))
+		}
+		deviceNames = v.deviceNameList
+		v.devices = len(deviceNames)
+	} else {
+		if v.devices < 1 {
+			return fmt.Errorf("--devices must be at least 1")
+		}
+		deviceNames = buildDeviceNames(v.device, v.devices)
+	}
+
+	// Scenario mode: phases executed in sequence.
+	if cfg != nil && len(cfg.Scenario) > 0 {
+		if v.replayFile != "" {
+			return fmt.Errorf("scenario mode is incompatible with --replay-file")
+		}
+		if len(cfg.Fields) > 0 {
+			return fmt.Errorf("scenario mode is incompatible with top-level fields")
+		}
+		err := runScenario(ctx, rng, v, cfg.Scenario, sink, deviceNames, start)
+		waitIfHTTPServer(ctx, v.output, v.httpPort)
+		return err
+	}
+
+	// Multi-field mode: only available via config file.
+	if cfg != nil && len(cfg.Fields) > 0 {
+		fieldFns := make(map[string]func(float64) float64, len(cfg.Fields))
+		for name, fc := range cfg.Fields {
+			fn, err := buildFieldFn(rng, fc, start, durationSeconds)
+			if err != nil {
+				return fmt.Errorf("field %q: %w", name, err)
+			}
+			fieldFns[name] = fn
+		}
+		scales := make([]float64, v.devices)
+		for i := range scales {
+			scales[i] = 1.0
+			if v.spread > 0 {
+				scales[i] = 1.0 + v.spread*(2*rng.Float64()-1)
+			}
+		}
+		makers := multiFieldMakers(rng, fieldFns, scales, v.noise, v.anomalyRate, v.anomalyFactor)
+		dispatchRun(ctx, v.realtime, rng, makers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
+		waitIfHTTPServer(ctx, v.output, v.httpPort)
+		return nil
+	}
+
+	// Geo mode.
+	if v.curveType == "geo" {
+		walkers := make([]*GeoWalker, v.devices)
+		for i := range walkers {
+			walkers[i] = NewGeoWalker(v.geoLat, v.geoLon, v.geoBearing, v.geoSpeed, v.geoDrift)
+		}
+		makers := geoMakers(rng, walkers, stepSeconds)
+		dispatchRun(ctx, v.realtime, rng, makers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
+		waitIfHTTPServer(ctx, v.output, v.httpPort)
+		return nil
+	}
+
+	// Single-field mode.
+	var baseFn func(float64) float64
+	switch v.curveType {
+	case "linear":
+		baseFn = GetLinear(v.linearFirst, v.linearLast, start, durationSeconds)
+	case "cos":
+		periodSeconds, err := GetSeconds(v.cosPeriod)
+		if err != nil {
+			return fmt.Errorf("invalid --period: %w", err)
+		}
+		baseFn = GetCosinus(v.cosMin, v.cosMax, periodSeconds)
+	case "sawtooth":
+		periodSeconds, err := GetSeconds(v.cosPeriod)
+		if err != nil {
+			return fmt.Errorf("invalid --period: %w", err)
+		}
+		baseFn = GetSawtooth(v.cosMin, v.cosMax, start, periodSeconds)
+	case "square":
+		periodSeconds, err := GetSeconds(v.cosPeriod)
+		if err != nil {
+			return fmt.Errorf("invalid --period: %w", err)
+		}
+		if v.dutyCycle <= 0 || v.dutyCycle >= 1 {
+			return fmt.Errorf("--duty-cycle must be between 0 and 1 (exclusive), got %g", v.dutyCycle)
+		}
+		baseFn = GetSquare(v.cosMin, v.cosMax, start, periodSeconds, v.dutyCycle)
+	case "log":
+		baseFn = GetLog(start)
+	case "exp":
+		baseFn = GetExp(start, durationSeconds)
+	case "walk":
+		// baseFn intentionally left nil; each device gets its own closure below.
+	default:
+		return fmt.Errorf("unknown curve type %q (use cos, linear, log, exp, walk, sawtooth, square, geo)", v.curveType)
+	}
+
+	fns := make([]func(float64) float64, v.devices)
+	for i := range fns {
+		devRng := rand.New(rand.NewPCG(rng.Uint64(), rng.Uint64()))
+		scale := 1.0
+		if v.spread > 0 {
+			scale = 1.0 + v.spread*(2*rng.Float64()-1)
+		}
+		if v.curveType == "walk" {
+			fns[i] = WithAnomaly(devRng, WithNoise(devRng, GetRandomWalk(devRng, v.walkStart*scale, v.walkStep, v.walkBias, v.walkMin, v.walkMax), v.noise), v.anomalyRate, v.anomalyFactor)
+		} else {
+			fn := baseFn
+			s := scale
+			fns[i] = WithAnomaly(devRng, WithNoise(devRng, func(x float64) float64 { return fn(x) * s }, v.noise), v.anomalyRate, v.anomalyFactor)
+		}
+	}
+	makers := singleFieldMakers(fns)
+	dispatchRun(ctx, v.realtime, rng, makers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
+	waitIfHTTPServer(ctx, v.output, v.httpPort)
+	return nil
+}
+
 func main() {
 	var v cliFlags
 
@@ -159,344 +499,7 @@ func main() {
 Use --config to load a YAML config file; CLI flags override any config value.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().NFlag() == 0 {
-				return cmd.Help()
-			}
-
-			if v.generateConfig {
-				printSampleConfig()
-				return nil
-			}
-
-			// Load config file and apply values for flags not explicitly set on the CLI.
-			var cfg *Config
-			if v.configFile != "" {
-				c, err := LoadConfig(v.configFile)
-				if err != nil {
-					return fmt.Errorf("failed to load config: %w", err)
-				}
-				cfg = c
-				applyConfig(cfg, cmd.Flags().Changed, &v)
-			}
-
-			if err := validateParams(&v); err != nil {
-				return err
-			}
-
-			// Infer output sink from sink-specific flags when --output was not set.
-			if !cmd.Flags().Changed("output") {
-				switch {
-				case cmd.Flags().Changed("webhook-url"):
-					v.output = "webhook"
-				case cmd.Flags().Changed("nats-url"):
-					v.output = "nats"
-				case cmd.Flags().Changed("mqtt-broker"):
-					v.output = "mqtt"
-				case cmd.Flags().Changed("file-path"):
-					v.output = "file"
-				case cmd.Flags().Changed("kafka-brokers"):
-					v.output = "kafka"
-				case cmd.Flags().Changed("otlp-endpoint"):
-					v.output = "otlp"
-				case cmd.Flags().Changed("prometheus-port"):
-					v.output = "prometheus"
-				case cmd.Flags().Changed("influxdb-url"):
-					v.output = "influxdb"
-				}
-			}
-
-			// http-server is a live-query sink: auto-enable realtime so the
-			// buffer updates on every step instead of being filled instantly.
-			if v.output == "http-server" && !v.realtime && !cmd.Flags().Changed("realtime") {
-				v.realtime = true
-			}
-
-			renderer, webhookCT, err := buildRenderer(&v)
-			if err != nil {
-				return err
-			}
-
-			// Initialise RNG.
-			rng := newRand()
-			if v.seed != 0 {
-				rng = seededRand(uint64(v.seed))
-			}
-
-			// Parse file sink rotation parameters.
-			var fileMaxBytes int64
-			if v.fileMaxSize != "" {
-				fileMaxBytes, err = ParseSize(v.fileMaxSize)
-				if err != nil {
-					return fmt.Errorf("invalid --file-max-size: %w", err)
-				}
-			}
-			var fileMaxAgeDur time.Duration
-			if v.fileMaxAge != "" {
-				ageSecs, err := GetSeconds(v.fileMaxAge)
-				if err != nil {
-					return fmt.Errorf("invalid --file-max-age: %w", err)
-				}
-				fileMaxAgeDur = time.Duration(ageSecs) * time.Second
-			}
-
-			// Parse --otlp-header key=value pairs into a map.
-			otlpHeaderMap := make(map[string]string, len(v.otlpHeaders))
-			for _, h := range v.otlpHeaders {
-				k, val, ok := strings.Cut(h, "=")
-				if !ok {
-					return fmt.Errorf("invalid --otlp-header %q: expected key=value", h)
-				}
-				otlpHeaderMap[k] = val
-			}
-
-			// Build the output sink.
-			sink, err := buildSink(sinkConfig{
-				output:             v.output,
-				webhookURL:         v.webhookURL,
-				webhookToken:       v.webhookToken,
-				webhookContentType: webhookCT,
-				influxdbURL:        v.influxdbURL,
-				influxdbToken:      v.influxdbToken,
-				influxdbOrg:        v.influxdbOrg,
-				influxdbBucket:     v.influxdbBucket,
-				influxMeasurement:  v.influxMeasurement,
-				natsURL:            v.natsURL,
-				natsSubject:        v.natsSubject,
-				natsUser:           v.natsUser,
-				natsPassword:       v.natsPassword,
-				natsToken:          v.natsToken,
-				mqttBroker:         v.mqttBroker,
-				mqttTopic:          v.mqttTopic,
-				mqttClientID:       v.mqttClientID,
-				mqttQoS:            v.mqttQoS,
-				mqttUser:           v.mqttUser,
-				mqttPassword:       v.mqttPassword,
-				mqttCACert:         v.mqttCACert,
-				mqttCert:           v.mqttCert,
-				mqttKey:            v.mqttKey,
-				mqttTLSInsecure:    v.mqttTLSInsecure,
-				mqttDeviceCerts:    v.mqttDeviceCerts,
-				filePath:           v.filePath,
-				fileMaxBytes:       fileMaxBytes,
-				fileMaxAge:         fileMaxAgeDur,
-				kafkaBrokers:       v.kafkaBrokers,
-				kafkaTopic:         v.kafkaTopic,
-				kafkaUsername:      v.kafkaUsername,
-				kafkaPassword:      v.kafkaPassword,
-				kafkaTLS:           v.kafkaTLS,
-				kafkaTLSInsecure:   v.kafkaTLSInsecure,
-				otlpEndpoint:       v.otlpEndpoint,
-				otlpHTTP:           v.otlpHTTP,
-				otlpHeaders:        otlpHeaderMap,
-				otlpInsecure:       v.otlpInsecure,
-				otlpMetricName:     v.otlpMetricName,
-				prometheusPort:     v.prometheusPort,
-				prometheusMetric:   v.prometheusMetric,
-				httpPort:           v.httpPort,
-				httpBuffer:         v.httpBuffer,
-				renderer:           renderer,
-			})
-			if err != nil {
-				return fmt.Errorf("sink: %w", err)
-			}
-			defer func() {
-				if err := sink.Close(); err != nil {
-					log.Printf("sink close error: %v", err)
-				}
-			}()
-
-			// Wrap sink with verbose logging when requested.
-			if v.verbose {
-				sink = &verboseSink{inner: sink, render: renderer, w: os.Stderr}
-			}
-
-			// Wrap sink to count sends and print a summary when the run ends.
-			stats := &statsSink{inner: sink}
-			sink = stats
-			runStart := time.Now()
-			defer func() {
-				elapsed := time.Since(runStart)
-				pts := stats.sent.Load()
-				errs := stats.errors.Load()
-				rate := 0.0
-				if elapsed.Seconds() > 0 {
-					rate = float64(pts) / elapsed.Seconds()
-				}
-				fmt.Fprintf(os.Stderr, "sent %d points in %.1fs (%.1f pts/s, %d errors)\n",
-					pts, elapsed.Seconds(), rate, errs)
-			}()
-
-			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-			defer cancel()
-
-			// Replay mode.
-			if v.replayFile != "" {
-				stepSeconds, err := GetSeconds(v.step)
-				if err != nil {
-					return fmt.Errorf("invalid --step: %w", err)
-				}
-				return runReplay(ctx, v.replayFile, sink, v.realtime, stepSeconds)
-			}
-
-			stepSeconds, err := GetSeconds(v.step)
-			if err != nil {
-				return fmt.Errorf("invalid --step: %w", err)
-			}
-
-			var durationSeconds, itemCount int
-			if v.count > 0 {
-				if cmd.Flags().Changed("duration") {
-					return fmt.Errorf("--count and --duration are mutually exclusive")
-				}
-				itemCount = v.count
-				durationSeconds = v.count * stepSeconds
-			} else {
-				durationSeconds, err = GetSeconds(v.duration)
-				if err != nil {
-					return fmt.Errorf("invalid --duration: %w", err)
-				}
-				itemCount = durationSeconds / stepSeconds
-			}
-
-			start, err := ParseFromTime(v.from)
-			if err != nil {
-				return fmt.Errorf("--from: %w", err)
-			}
-
-			// Resolve device names: explicit list takes precedence over --device / --devices.
-			var deviceNames []string
-			if len(v.deviceNameList) > 0 {
-				if cmd.Flags().Changed("devices") && v.devices != len(v.deviceNameList) {
-					return fmt.Errorf("--devices=%d conflicts with --device-names (%d names provided)", v.devices, len(v.deviceNameList))
-				}
-				deviceNames = v.deviceNameList
-				v.devices = len(deviceNames)
-			} else {
-				if v.devices < 1 {
-					return fmt.Errorf("--devices must be at least 1")
-				}
-				deviceNames = make([]string, v.devices)
-				for i := range deviceNames {
-					if v.devices == 1 {
-						deviceNames[i] = v.device
-					} else {
-						deviceNames[i] = fmt.Sprintf("%s-%d", v.device, i)
-					}
-				}
-			}
-
-			// Scenario mode: phases executed in sequence.
-			if cfg != nil && len(cfg.Scenario) > 0 {
-				if v.replayFile != "" {
-					return fmt.Errorf("scenario mode is incompatible with --replay-file")
-				}
-				if len(cfg.Fields) > 0 {
-					return fmt.Errorf("scenario mode is incompatible with top-level fields")
-				}
-				err := runScenario(ctx, rng, &v, cfg.Scenario, sink, deviceNames, start)
-				waitIfHTTPServer(ctx, v.output, v.httpPort)
-				return err
-			}
-
-			// Multi-field mode: only available via config file.
-			if cfg != nil && len(cfg.Fields) > 0 {
-				fieldFns := make(map[string]func(float64) float64, len(cfg.Fields))
-				for name, fc := range cfg.Fields {
-					fn, err := buildFieldFn(rng, fc, start, durationSeconds)
-					if err != nil {
-						return fmt.Errorf("field %q: %w", name, err)
-					}
-					fieldFns[name] = fn
-				}
-				scales := make([]float64, v.devices)
-				for i := range scales {
-					scales[i] = 1.0
-					if v.spread > 0 {
-						scales[i] = 1.0 + v.spread*(2*rng.Float64()-1)
-					}
-				}
-				if v.realtime {
-					runRealtimeMulti(ctx, rng, fieldFns, scales, v.noise, v.anomalyRate, v.anomalyFactor, v.dropoutRate, sink, deviceNames, start, itemCount, stepSeconds, v.rate)
-				} else {
-					runBatchMulti(rng, fieldFns, scales, v.noise, v.anomalyRate, v.anomalyFactor, v.dropoutRate, sink, deviceNames, start, itemCount, stepSeconds, v.rate)
-				}
-				waitIfHTTPServer(ctx, v.output, v.httpPort)
-				return nil
-			}
-
-			// Geo mode.
-			if v.curveType == "geo" {
-				walkers := make([]*GeoWalker, v.devices)
-				for i := range walkers {
-					walkers[i] = NewGeoWalker(v.geoLat, v.geoLon, v.geoBearing, v.geoSpeed, v.geoDrift)
-				}
-				if v.realtime {
-					runRealtimeGeo(ctx, rng, walkers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
-				} else {
-					runBatchGeo(rng, walkers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
-				}
-				waitIfHTTPServer(ctx, v.output, v.httpPort)
-				return nil
-			}
-
-			// Single-field mode.
-			var baseFn func(float64) float64
-			switch v.curveType {
-			case "linear":
-				baseFn = GetLinear(v.linearFirst, v.linearLast, start, durationSeconds)
-			case "cos":
-				periodSeconds, err := GetSeconds(v.cosPeriod)
-				if err != nil {
-					return fmt.Errorf("invalid --period: %w", err)
-				}
-				baseFn = GetCosinus(v.cosMin, v.cosMax, periodSeconds)
-			case "sawtooth":
-				periodSeconds, err := GetSeconds(v.cosPeriod)
-				if err != nil {
-					return fmt.Errorf("invalid --period: %w", err)
-				}
-				baseFn = GetSawtooth(v.cosMin, v.cosMax, start, periodSeconds)
-			case "square":
-				periodSeconds, err := GetSeconds(v.cosPeriod)
-				if err != nil {
-					return fmt.Errorf("invalid --period: %w", err)
-				}
-				if v.dutyCycle <= 0 || v.dutyCycle >= 1 {
-					return fmt.Errorf("--duty-cycle must be between 0 and 1 (exclusive), got %g", v.dutyCycle)
-				}
-				baseFn = GetSquare(v.cosMin, v.cosMax, start, periodSeconds, v.dutyCycle)
-			case "log":
-				baseFn = GetLog(start)
-			case "exp":
-				baseFn = GetExp(start, durationSeconds)
-			case "walk":
-				// baseFn intentionally left nil; each device gets its own closure below.
-			default:
-				return fmt.Errorf("unknown curve type %q (use cos, linear, log, exp, walk, sawtooth, square, geo)", v.curveType)
-			}
-
-			fns := make([]func(float64) float64, v.devices)
-			for i := range fns {
-				scale := 1.0
-				if v.spread > 0 {
-					scale = 1.0 + v.spread*(2*rng.Float64()-1)
-				}
-				if v.curveType == "walk" {
-					fns[i] = WithAnomaly(rng, WithNoise(rng, GetRandomWalk(rng, v.walkStart*scale, v.walkStep, v.walkBias, v.walkMin, v.walkMax), v.noise), v.anomalyRate, v.anomalyFactor)
-				} else {
-					fn := baseFn
-					s := scale
-					fns[i] = WithAnomaly(rng, WithNoise(rng, func(x float64) float64 { return fn(x) * s }, v.noise), v.anomalyRate, v.anomalyFactor)
-				}
-			}
-			if v.realtime {
-				runRealtime(ctx, rng, fns, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
-			} else {
-				runBatch(rng, fns, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
-			}
-
-			waitIfHTTPServer(ctx, v.output, v.httpPort)
-			return nil
+			return run(cmd, &v)
 		},
 	}
 

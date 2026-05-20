@@ -133,16 +133,17 @@ func buildPhaseFns(rng *rand.Rand, pp phaseParams, devices int, spread float64, 
 
 	fns := make([]func(float64) float64, devices)
 	for i := range fns {
+		devRng := rand.New(rand.NewPCG(rng.Uint64(), rng.Uint64()))
 		scale := 1.0
 		if spread > 0 {
 			scale = 1.0 + spread*(2*rng.Float64()-1)
 		}
 		if pp.curveType == "walk" {
-			fns[i] = WithAnomaly(rng, WithNoise(rng, GetRandomWalk(rng, pp.walkStart*scale, pp.walkStep, pp.walkBias, pp.walkMin, pp.walkMax), pp.noise), pp.anomalyRate, pp.anomalyFactor)
+			fns[i] = WithAnomaly(devRng, WithNoise(devRng, GetRandomWalk(devRng, pp.walkStart*scale, pp.walkStep, pp.walkBias, pp.walkMin, pp.walkMax), pp.noise), pp.anomalyRate, pp.anomalyFactor)
 		} else {
 			fn := baseFn
 			s := scale
-			fns[i] = WithAnomaly(rng, WithNoise(rng, func(x float64) float64 { return fn(x) * s }, pp.noise), pp.anomalyRate, pp.anomalyFactor)
+			fns[i] = WithAnomaly(devRng, WithNoise(devRng, func(x float64) float64 { return fn(x) * s }, pp.noise), pp.anomalyRate, pp.anomalyFactor)
 		}
 	}
 	return fns, nil
@@ -174,21 +175,14 @@ func runScenario(ctx context.Context, rng *rand.Rand, v *cliFlags, phases []Phas
 		phaseStart := batchTs
 
 		if pp.curveType == "geo" {
-			if v.realtime {
-				runRealtimeGeo(ctx, rng, walkers, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
-			} else {
-				runBatchGeo(rng, walkers, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
-			}
+			makers := geoMakers(rng, walkers, pp.stepSeconds)
+			dispatchRun(ctx, v.realtime, rng, makers, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
 		} else {
 			fns, err := buildPhaseFns(rng, pp, len(deviceNames), v.spread, phaseStart)
 			if err != nil {
 				return fmt.Errorf("scenario phase %d: %w", i+1, err)
 			}
-			if v.realtime {
-				runRealtime(ctx, rng, fns, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
-			} else {
-				runBatch(rng, fns, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
-			}
+			dispatchRun(ctx, v.realtime, rng, singleFieldMakers(fns), sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
 		}
 
 		batchTs += int64(pp.durationSeconds)
