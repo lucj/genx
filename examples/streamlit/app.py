@@ -67,6 +67,7 @@ cmd = [
     "--noise", str(noise),
     "--anomaly-rate", str(anomaly_rate),
     "--dropout-rate", str(dropout_rate),
+    "--realtime=false",
     "--format", "csv",
 ]
 if devices > 1 and spread > 0:
