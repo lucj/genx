@@ -26,7 +26,8 @@ with st.sidebar:
         c1, c2 = st.columns(2)
         min_val = c1.number_input("Min", value=10.0)
         max_val = c2.number_input("Max", value=25.0)
-        period = st.selectbox("Period", ["15m", "1h", "6h", "12h", "1d"], index=2)
+        # Default period matches the default duration (1h) → one full cycle visible immediately.
+        period = st.selectbox("Period", ["15m", "1h", "6h", "12h", "1d"], index=1)
         if curve_type == "square":
             duty_cycle = st.slider("Duty cycle", 0.1, 0.9, 0.5, 0.05)
     elif curve_type == "linear":
@@ -40,10 +41,18 @@ with st.sidebar:
         walk_step_size = st.number_input("Step size", value=0.5, min_value=0.01)
         walk_bias = st.number_input("Bias", value=0.0,
                                     help="Constant drift per step; negative = downward")
+        c1, c2 = st.columns(2)
+        walk_min = c1.number_input("Min clamp", value=0.0,
+                                   help="Lower bound; set both to 0 to disable clamping")
+        walk_max = c2.number_input("Max clamp", value=0.0,
+                                   help="Upper bound; set both to 0 to disable clamping")
 
     st.subheader("Realism")
     noise = st.slider("Noise", 0.0, 0.5, 0.0, 0.01)
     anomaly_rate = st.slider("Anomaly rate", 0.0, 0.2, 0.0, 0.01)
+    if anomaly_rate > 0:
+        anomaly_factor = st.slider("Anomaly factor", 1.5, 20.0, 3.0, 0.5,
+                                   help="Spike = value × factor, drop = value ÷ factor")
     dropout_rate = st.slider("Dropout rate", 0.0, 0.5, 0.0, 0.01)
 
     st.subheader("Reproducibility")
@@ -74,6 +83,8 @@ if devices > 1 and spread > 0:
     cmd += ["--spread", str(spread)]
 if seed > 0:
     cmd += ["--seed", str(int(seed))]
+if anomaly_rate > 0:
+    cmd += ["--anomaly-factor", str(anomaly_factor)]
 
 if curve_type in ("cos", "sawtooth", "square"):
     cmd += ["--min", str(min_val), "--max", str(max_val), "--period", period]
@@ -87,6 +98,8 @@ elif curve_type == "walk":
         "--walk-step", str(walk_step_size),
         "--walk-bias", str(walk_bias),
     ]
+    if walk_min != 0 or walk_max != 0:
+        cmd += ["--walk-min", str(walk_min), "--walk-max", str(walk_max)]
 
 with st.spinner("Generating…"):
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -100,8 +113,7 @@ df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
 
 value_cols = [c for c in df.columns if c not in ("device", "timestamp")]
 
-# Build chart DataFrame: one column per device (single-field) or
-# one column per field (multi-field, single device).
+# One column per device (fleet mode); single device keeps its value column(s) as-is.
 if int(devices) > 1:
     chart_df = df.pivot_table(
         index="timestamp", columns="device", values=value_cols[0], aggfunc="first"
