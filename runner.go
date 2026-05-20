@@ -54,7 +54,7 @@ func runBatch(rng *rand.Rand, fns []func(float64) float64, sink Sink, devices []
 	}
 }
 
-func runRealtime(ctx context.Context, rng *rand.Rand, fns []func(float64) float64, sink Sink, devices []string, count, stepSeconds int, dropoutRate, rate float64) {
+func runRealtime(ctx context.Context, rng *rand.Rand, fns []func(float64) float64, sink Sink, devices []string, start int64, count, stepSeconds int, dropoutRate, rate float64) {
 	rateC, stop := rateTicker(rate)
 	defer stop()
 	var wg sync.WaitGroup
@@ -81,7 +81,7 @@ func runRealtime(ctx context.Context, rng *rand.Rand, fns []func(float64) float6
 				if !waitRate(ctx, rateC) {
 					return
 				}
-				ts := time.Now().Unix()
+				ts := start + int64(sent*stepSeconds)
 				v := fn(float64(ts))
 				dp := DataPoint{Device: device, Timestamp: ts, Value: &v}
 				if err := sink.Send(dp); err != nil {
@@ -119,7 +119,7 @@ func runBatchMulti(rng *rand.Rand, fieldFns map[string]func(float64) float64, sc
 	}
 }
 
-func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]func(float64) float64, scales []float64, noise, anomalyRate, anomalyFactor, dropoutRate float64, sink Sink, devices []string, count, stepSeconds int, rate float64) {
+func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]func(float64) float64, scales []float64, noise, anomalyRate, anomalyFactor, dropoutRate float64, sink Sink, devices []string, start int64, count, stepSeconds int, rate float64) {
 	rateC, stop := rateTicker(rate)
 	defer stop()
 	var wg sync.WaitGroup
@@ -146,7 +146,7 @@ func runRealtimeMulti(ctx context.Context, rng *rand.Rand, fieldFns map[string]f
 				if !waitRate(ctx, rateC) {
 					return
 				}
-				ts := time.Now().Unix()
+				ts := start + int64(sent*stepSeconds)
 				dp := DataPoint{Device: device, Timestamp: ts, Fields: evalFields(rng, fieldFns, scale, noise, anomalyRate, anomalyFactor, float64(ts))}
 				if err := sink.Send(dp); err != nil {
 					log.Printf("send error: %v", err)
@@ -187,7 +187,7 @@ func runBatchGeo(rng *rand.Rand, walkers []*GeoWalker, sink Sink, devices []stri
 	}
 }
 
-func runRealtimeGeo(ctx context.Context, rng *rand.Rand, walkers []*GeoWalker, sink Sink, devices []string, count, stepSeconds int, dropoutRate, rate float64) {
+func runRealtimeGeo(ctx context.Context, rng *rand.Rand, walkers []*GeoWalker, sink Sink, devices []string, start int64, count, stepSeconds int, dropoutRate, rate float64) {
 	rateC, stop := rateTicker(rate)
 	defer stop()
 	var wg sync.WaitGroup
@@ -214,7 +214,7 @@ func runRealtimeGeo(ctx context.Context, rng *rand.Rand, walkers []*GeoWalker, s
 				if !waitRate(ctx, rateC) {
 					return
 				}
-				ts := time.Now().Unix()
+				ts := start + int64(sent*stepSeconds)
 				lat, lon := walker.Step(rng, stepSeconds)
 				dp := DataPoint{
 					Device:    device,

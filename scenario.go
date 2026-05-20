@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
-	"time"
 )
 
 // phaseParams holds the fully resolved (global + phase override) parameters
@@ -169,19 +168,16 @@ func runScenario(ctx context.Context, rng *rand.Rand, v *cliFlags, phases []Phas
 		}
 		itemCount := pp.durationSeconds / pp.stepSeconds
 
-		// phaseStart is the reference timestamp for curve functions.
-		// In realtime mode it matches wall-clock; in batch mode it tracks the
-		// accumulated offset so timestamps are continuous across phases.
+		// phaseStart anchors curve functions and timestamps for this phase.
+		// Both batch and realtime modes use the same reference so --from is
+		// respected regardless of pacing.
 		phaseStart := batchTs
-		if v.realtime {
-			phaseStart = time.Now().Unix()
-		}
 
 		if pp.curveType == "geo" {
 			if v.realtime {
-				runRealtimeGeo(ctx, rng, walkers, sink, deviceNames, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
+				runRealtimeGeo(ctx, rng, walkers, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
 			} else {
-				runBatchGeo(rng, walkers, sink, deviceNames, batchTs, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
+				runBatchGeo(rng, walkers, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
 			}
 		} else {
 			fns, err := buildPhaseFns(rng, pp, len(deviceNames), v.spread, phaseStart)
@@ -189,9 +185,9 @@ func runScenario(ctx context.Context, rng *rand.Rand, v *cliFlags, phases []Phas
 				return fmt.Errorf("scenario phase %d: %w", i+1, err)
 			}
 			if v.realtime {
-				runRealtime(ctx, rng, fns, sink, deviceNames, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
+				runRealtime(ctx, rng, fns, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
 			} else {
-				runBatch(rng, fns, sink, deviceNames, batchTs, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
+				runBatch(rng, fns, sink, deviceNames, phaseStart, itemCount, pp.stepSeconds, pp.dropoutRate, v.rate)
 			}
 		}
 

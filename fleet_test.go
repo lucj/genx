@@ -68,7 +68,7 @@ func TestRunRealtimeFleet(t *testing.T) {
 		func(x float64) float64 { return 1.0 },
 		func(x float64) float64 { return 2.0 },
 	}
-	runRealtime(context.Background(), newRand(), fns, sink, devices, 2, 1, 0, 0)
+	runRealtime(context.Background(), newRand(), fns, sink, devices, 0, 2, 1, 0, 0)
 
 	if len(sink.points) != 4 {
 		t.Fatalf("expected 4 points (2 devices × 2 steps), got %d", len(sink.points))
@@ -92,7 +92,7 @@ func TestRunRealtimeCancellation(t *testing.T) {
 	devices := []string{"sensor-0"}
 
 	cancel()
-	runRealtime(ctx, newRand(), fns, sink, devices, 100, 10, 0, 0)
+	runRealtime(ctx, newRand(), fns, sink, devices, 0, 100, 10, 0, 0)
 
 	if len(sink.points) != 0 {
 		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
@@ -108,7 +108,7 @@ func TestRunRealtimeMultiEmitsPoints(t *testing.T) {
 	scales := []float64{1.0, 1.0}
 	devices := []string{"sensor-0", "sensor-1"}
 
-	runRealtimeMulti(context.Background(), newRand(), fieldFns, scales, 0, 0, 0, 0, sink, devices, 2, 1, 0)
+	runRealtimeMulti(context.Background(), newRand(), fieldFns, scales, 0, 0, 0, 0, sink, devices, 0, 2, 1, 0)
 
 	if len(sink.points) != 4 {
 		t.Fatalf("expected 4 points (2 devices × 2 steps), got %d", len(sink.points))
@@ -134,7 +134,7 @@ func TestRunRealtimeMultiCancellation(t *testing.T) {
 	fieldFns := map[string]func(float64) float64{
 		"temperature": func(x float64) float64 { return 22.0 },
 	}
-	runRealtimeMulti(ctx, newRand(), fieldFns, []float64{1.0}, 0, 0, 0, 0, sink, []string{"sensor-0"}, 100, 10, 0)
+	runRealtimeMulti(ctx, newRand(), fieldFns, []float64{1.0}, 0, 0, 0, 0, sink, []string{"sensor-0"}, 0, 100, 10, 0)
 
 	if len(sink.points) != 0 {
 		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
@@ -403,7 +403,7 @@ func TestRunRealtimeGeoCancellation(t *testing.T) {
 
 	sink := &captureSink{}
 	walker := NewGeoWalker(48.8566, 2.3522, 0, 10, 0)
-	runRealtimeGeo(ctx, newRand(), []*GeoWalker{walker}, sink, []string{"truck-0"}, 100, 10, 0, 0)
+	runRealtimeGeo(ctx, newRand(), []*GeoWalker{walker}, sink, []string{"truck-0"}, 0, 100, 10, 0, 0)
 
 	if len(sink.points) != 0 {
 		t.Errorf("expected 0 points after cancellation, got %d", len(sink.points))
