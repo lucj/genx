@@ -113,6 +113,8 @@ type cliFlags struct {
 	// Prometheus
 	prometheusPort   int
 	prometheusMetric string
+	httpPort         int
+	httpBuffer       int
 
 	// InfluxDB
 	influxdbURL    string
@@ -180,6 +182,8 @@ func registerFlags(cmd *cobra.Command, v *cliFlags) {
 	// Prometheus
 	f.IntVar(&v.prometheusPort, "prometheus-port", 9091, "port to expose /metrics on (--output prometheus)")
 	f.StringVar(&v.prometheusMetric, "prometheus-metric", "genx", "base metric name (--output prometheus); multi-field appends _<fieldname>")
+	f.IntVar(&v.httpPort, "http-port", 8888, "port for the HTTP pull server (--output http-server)")
+	f.IntVar(&v.httpBuffer, "http-buffer", 1, "number of recent points kept in memory for the HTTP pull server")
 
 	// Template
 	f.StringVar(&v.payloadTemplate, "payload-template", "", "Go text/template string for JSON payload")
@@ -319,6 +323,8 @@ func applyConfig(cfg *Config, changed func(string) bool, v *cliFlags) {
 	if cfg.KafkaTLSInsecure != nil && !changed("kafka-tls-insecure") { v.kafkaTLSInsecure = *cfg.KafkaTLSInsecure }
 	if cfg.PrometheusPort != nil && !changed("prometheus-port")      { v.prometheusPort = *cfg.PrometheusPort }
 	if cfg.PrometheusMetric != "" && !changed("prometheus-metric")   { v.prometheusMetric = cfg.PrometheusMetric }
+	if cfg.HTTPPort != nil && !changed("http-port")                  { v.httpPort = *cfg.HTTPPort }
+	if cfg.HTTPBuffer != nil && !changed("http-buffer")              { v.httpBuffer = *cfg.HTTPBuffer }
 	if cfg.OTLPEndpoint != "" && !changed("otlp-endpoint")     { v.otlpEndpoint = cfg.OTLPEndpoint }
 	if cfg.OTLPInsecure != nil && !changed("otlp-insecure")    { v.otlpInsecure = *cfg.OTLPInsecure }
 	if cfg.OTLPHTTP != nil && !changed("otlp-http")            { v.otlpHTTP = *cfg.OTLPHTTP }
@@ -355,6 +361,7 @@ func flagGroups() []flagGroup {
 		{"Kafka (--output kafka)", []string{"kafka-brokers", "kafka-topic", "kafka-username", "kafka-password", "kafka-tls", "kafka-tls-insecure"}},
 		{"OTLP (--output otlp)", []string{"otlp-endpoint", "otlp-http", "otlp-header", "otlp-insecure", "otlp-metric"}},
 		{"Prometheus pull (--output prometheus)", []string{"prometheus-port", "prometheus-metric"}},
+		{"HTTP pull server (--output http-server)", []string{"http-port", "http-buffer"}},
 	}
 }
 
@@ -388,6 +395,8 @@ func defaultCLIFlags() *cliFlags {
 		cloudEventType:    "io.genx.measurement",
 		prometheusPort:    9091,
 		prometheusMetric:  "genx",
+		httpPort:          8888,
+		httpBuffer:        1,
 		mqttBroker:        "tcp://localhost:1883",
 		mqttTopic:         "genx",
 		natsURL:           "nats://localhost:4222",
@@ -490,7 +499,7 @@ func registerCompletions(cmd *cobra.Command) {
 		return []string{"walk", "cos", "linear", "log", "exp", "sawtooth", "square", "geo"}, cobra.ShellCompDirectiveNoFileComp
 	})
 	_ = cmd.RegisterFlagCompletionFunc("output", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-		return []string{"stdout", "webhook", "nats", "mqtt", "file", "kafka", "otlp", "prometheus", "influxdb"}, cobra.ShellCompDirectiveNoFileComp
+		return []string{"stdout", "webhook", "nats", "mqtt", "file", "kafka", "otlp", "prometheus", "http-server", "influxdb"}, cobra.ShellCompDirectiveNoFileComp
 	})
 	_ = cmd.RegisterFlagCompletionFunc("format", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{"json", "csv", "influx", "cloudevent"}, cobra.ShellCompDirectiveNoFileComp

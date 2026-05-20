@@ -93,6 +93,9 @@ type Config struct {
 	PrometheusPort   *int   `yaml:"prometheus-port"`
 	PrometheusMetric string `yaml:"prometheus-metric"`
 
+	HTTPPort   *int `yaml:"http-port"`
+	HTTPBuffer *int `yaml:"http-buffer"`
+
 	OTLPEndpoint   string   `yaml:"otlp-endpoint"`
 	OTLPHTTP       *bool    `yaml:"otlp-http"`
 	OTLPHeaders    []string `yaml:"otlp-headers"`

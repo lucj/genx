@@ -86,7 +86,7 @@ period: 1d
 # ---------------------------------------------------------------------------
 # Output sink
 # ---------------------------------------------------------------------------
-output: stdout   # stdout | webhook | nats | mqtt | file | kafka | influxdb | otlp | prometheus
+output: stdout   # stdout | webhook | nats | mqtt | file | kafka | influxdb | otlp | prometheus | http-server
 format: json     # json | csv | influx | cloudevent  (stdout and file sinks)
 verbose: false   # print [OK]/[KO] <payload> to stderr for every point
 iso-time: false  # emit timestamp as ISO 8601 UTC string instead of Unix epoch
@@ -180,6 +180,12 @@ influx-measurement: genx   # InfluxDB measurement name (--format influx)
 # ---------------------------------------------------------------------------
 # prometheus-port: 9091
 # prometheus-metric: genx   # base metric name; multi-field appends _<fieldname>
+
+# ---------------------------------------------------------------------------
+# HTTP pull server (output: http-server)
+# ---------------------------------------------------------------------------
+# http-port: 8888
+# http-buffer: 1   # number of recent points kept in memory; use ?n= to query fewer
 `
 
 func printSampleConfig() {

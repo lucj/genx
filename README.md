@@ -388,6 +388,29 @@ genx validate --config config.yaml
 ✓ All checks passed
 ```
 
+### HTTP pull server (`--output http-server`)
+
+Starts a local HTTP server. Any client can poll `GET /` to retrieve the most recent point(s) as a JSON array — useful for pull-based systems, quick `curl` inspection, or dashboards that poll a REST endpoint.
+
+```bash
+genx --type cos --step 5s --realtime --output http-server --http-port 8888 --http-buffer 10
+curl http://localhost:8888/
+[{"device":"device","timestamp":1715000005,"value":24.81}]
+```
+
+Use `--http-buffer` to control how many recent points are kept in memory. Clients can request fewer with `?n=`:
+
+```bash
+curl "http://localhost:8888/?n=3"
+[
+  {"device":"device","timestamp":1715000000,"value":24.10},
+  {"device":"device","timestamp":1715000005,"value":24.53},
+  {"device":"device","timestamp":1715000010,"value":24.81}
+]
+```
+
+The response is always a JSON array, even when only one point is available. The endpoint always returns JSON regardless of `--format`.
+
 ## Multi-field payloads
 
 ```yaml
@@ -586,3 +609,10 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 |------|---------|-------------|
 | `--prometheus-port` | `9091` | Port to expose `/metrics` on |
 | `--prometheus-metric` | `genx` | Base metric name; multi-field appends `_<fieldname>` |
+
+### HTTP pull server (`--output http-server`)
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--http-port` | `8888` | Port the server listens on |
+| `--http-buffer` | `1` | Number of recent points kept in memory |

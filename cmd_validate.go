@@ -130,6 +130,8 @@ func printOutputSummary(v *cliFlags) {
 		fmt.Printf("✓ Output: otlp (endpoint: %s)\n", v.otlpEndpoint)
 	case "prometheus":
 		fmt.Printf("✓ Output: prometheus (port: %d, metric: %s)\n", v.prometheusPort, v.prometheusMetric)
+	case "http-server":
+		fmt.Printf("✓ Output: http-server (port: %d, buffer: %d points)\n", v.httpPort, v.httpBuffer)
 	default:
 		fmt.Printf("✓ Output: %s\n", v.output)
 	}

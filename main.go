@@ -54,6 +54,8 @@ type sinkConfig struct {
 	otlpMetricName     string
 	prometheusPort     int
 	prometheusMetric   string
+	httpPort           int
+	httpBuffer         int
 	influxdbURL        string
 	influxdbToken      string
 	influxdbOrg        string
@@ -86,10 +88,12 @@ func buildSink(cfg sinkConfig) (Sink, error) {
 		return NewOTLPSink(cfg.otlpEndpoint, cfg.otlpHTTP, cfg.otlpHeaders, cfg.otlpInsecure, cfg.otlpMetricName)
 	case "prometheus":
 		return NewPrometheusSink(cfg.prometheusPort, cfg.prometheusMetric)
+	case "http-server":
+		return NewHTTPServerSink(cfg.httpPort, cfg.httpBuffer)
 	case "influxdb":
 		return NewInfluxDBSink(cfg.influxdbURL, cfg.influxdbToken, cfg.influxdbOrg, cfg.influxdbBucket, cfg.influxMeasurement)
 	default:
-		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka, otlp, prometheus, influxdb)", cfg.output)
+		return nil, fmt.Errorf("unknown output %q (use stdout, webhook, nats, mqtt, file, kafka, otlp, prometheus, http-server, influxdb)", cfg.output)
 	}
 }
 
@@ -272,6 +276,8 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				otlpMetricName:     v.otlpMetricName,
 				prometheusPort:     v.prometheusPort,
 				prometheusMetric:   v.prometheusMetric,
+				httpPort:           v.httpPort,
+				httpBuffer:         v.httpBuffer,
 				renderer:           renderer,
 			})
 			if err != nil {
