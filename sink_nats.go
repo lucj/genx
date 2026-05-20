@@ -4,12 +4,16 @@ import "github.com/nats-io/nats.go"
 
 // NatsSink publishes each data point to a NATS subject.
 type NatsSink struct {
-	nc      *nats.Conn
-	subject string
-	render  Renderer
+	nc        *nats.Conn
+	subjectFn func(DataPoint) string
+	render    Renderer
 }
 
 func NewNatsSink(url, subject, user, password, token string, render Renderer) (*NatsSink, error) {
+	subjectFn, err := compileTopic(subject)
+	if err != nil {
+		return nil, err
+	}
 	opts := []nats.Option{}
 	switch {
 	case user != "":
@@ -21,7 +25,7 @@ func NewNatsSink(url, subject, user, password, token string, render Renderer) (*
 	if err != nil {
 		return nil, err
 	}
-	return &NatsSink{nc: nc, subject: subject, render: render}, nil
+	return &NatsSink{nc: nc, subjectFn: subjectFn, render: render}, nil
 }
 
 func (s *NatsSink) Send(dp DataPoint) error {
@@ -29,7 +33,7 @@ func (s *NatsSink) Send(dp DataPoint) error {
 	if err != nil {
 		return err
 	}
-	return s.nc.Publish(s.subject, b)
+	return s.nc.Publish(s.subjectFn(dp), b)
 }
 
 // Close drains the connection, which flushes pending messages before disconnecting.

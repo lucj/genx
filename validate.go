@@ -2,21 +2,30 @@ package main
 
 import "fmt"
 
+// validateAnomalyDropoutNoise checks the shared constraints that apply to
+// both top-level flags and per-phase scenario parameters.
+func validateAnomalyDropoutNoise(anomalyRate, anomalyFactor, dropoutRate, noise float64) error {
+	if anomalyRate < 0 || anomalyRate > 1 {
+		return fmt.Errorf("anomaly-rate must be between 0 and 1, got %g", anomalyRate)
+	}
+	if anomalyRate > 0 && anomalyFactor <= 1 {
+		return fmt.Errorf("anomaly-factor must be > 1 when anomaly-rate > 0, got %g", anomalyFactor)
+	}
+	if dropoutRate < 0 || dropoutRate > 1 {
+		return fmt.Errorf("dropout-rate must be between 0 and 1, got %g", dropoutRate)
+	}
+	if noise < 0 {
+		return fmt.Errorf("noise must be >= 0, got %g", noise)
+	}
+	return nil
+}
+
 // validateParams checks that all resolved flag values are within acceptable
 // ranges. Called after config file values are merged so it covers both CLI
 // flags and config file fields in one pass.
 func validateParams(v *cliFlags) error {
-	if v.anomalyRate < 0 || v.anomalyRate > 1 {
-		return fmt.Errorf("anomaly-rate must be between 0 and 1, got %g", v.anomalyRate)
-	}
-	if v.anomalyRate > 0 && v.anomalyFactor <= 1 {
-		return fmt.Errorf("anomaly-factor must be > 1 when anomaly-rate > 0, got %g", v.anomalyFactor)
-	}
-	if v.dropoutRate < 0 || v.dropoutRate > 1 {
-		return fmt.Errorf("dropout-rate must be between 0 and 1, got %g", v.dropoutRate)
-	}
-	if v.noise < 0 {
-		return fmt.Errorf("noise must be >= 0, got %g", v.noise)
+	if err := validateAnomalyDropoutNoise(v.anomalyRate, v.anomalyFactor, v.dropoutRate, v.noise); err != nil {
+		return err
 	}
 	if v.spread < 0 {
 		return fmt.Errorf("spread must be >= 0, got %g", v.spread)
@@ -41,17 +50,5 @@ func validateParams(v *cliFlags) error {
 
 // validatePhaseParams checks range constraints on a resolved phase.
 func validatePhaseParams(pp phaseParams) error {
-	if pp.anomalyRate < 0 || pp.anomalyRate > 1 {
-		return fmt.Errorf("anomaly-rate must be between 0 and 1, got %g", pp.anomalyRate)
-	}
-	if pp.anomalyRate > 0 && pp.anomalyFactor <= 1 {
-		return fmt.Errorf("anomaly-factor must be > 1 when anomaly-rate > 0, got %g", pp.anomalyFactor)
-	}
-	if pp.dropoutRate < 0 || pp.dropoutRate > 1 {
-		return fmt.Errorf("dropout-rate must be between 0 and 1, got %g", pp.dropoutRate)
-	}
-	if pp.noise < 0 {
-		return fmt.Errorf("noise must be >= 0, got %g", pp.noise)
-	}
-	return nil
+	return validateAnomalyDropoutNoise(pp.anomalyRate, pp.anomalyFactor, pp.dropoutRate, pp.noise)
 }

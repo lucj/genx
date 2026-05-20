@@ -25,7 +25,7 @@ func (s *captureSink) Close() error { return nil }
 func TestRunBatchSingleDevice(t *testing.T) {
 	sink := &captureSink{}
 	fn := func(x float64) float64 { return x }
-	runBatch(newRand(), []func(float64) float64{fn}, sink, []string{"dev"}, time.Now().Unix(), 3, 60, 0, 0)
+	runBatch(newRand(), singleFieldMakers([]func(float64) float64{fn}), sink, []string{"dev"}, time.Now().Unix(), 3, 60, 0, 0)
 
 	if len(sink.points) != 3 {
 		t.Fatalf("expected 3 points, got %d", len(sink.points))
@@ -45,7 +45,7 @@ func TestRunBatchFleet(t *testing.T) {
 		func(x float64) float64 { return x * 2 },
 		func(x float64) float64 { return x * 3 },
 	}
-	runBatch(newRand(), fns, sink, devices, time.Now().Unix(), 4, 60, 0, 0)
+	runBatch(newRand(), singleFieldMakers(fns), sink, devices, time.Now().Unix(), 4, 60, 0, 0)
 
 	if len(sink.points) != 12 {
 		t.Fatalf("expected 12 points (3 devices × 4 steps), got %d", len(sink.points))
@@ -68,7 +68,7 @@ func TestRunRealtimeFleet(t *testing.T) {
 		func(x float64) float64 { return 1.0 },
 		func(x float64) float64 { return 2.0 },
 	}
-	runRealtime(context.Background(), newRand(), fns, sink, devices, 0, 2, 1, 0, 0)
+	runRealtime(context.Background(), newRand(), singleFieldMakers(fns), sink, devices, 0, 2, 1, 0, 0)
 
 	if len(sink.points) != 4 {
 		t.Fatalf("expected 4 points (2 devices × 2 steps), got %d", len(sink.points))
@@ -92,7 +92,7 @@ func TestRunRealtimeCancellation(t *testing.T) {
 	devices := []string{"sensor-0"}
 
 	cancel()
-	runRealtime(ctx, newRand(), fns, sink, devices, 0, 100, 10, 0, 0)
+	runRealtime(ctx, newRand(), singleFieldMakers(fns), sink, devices, 0, 100, 10, 0, 0)
 
 	if len(sink.points) != 0 {
 		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
@@ -108,7 +108,8 @@ func TestRunRealtimeMultiEmitsPoints(t *testing.T) {
 	scales := []float64{1.0, 1.0}
 	devices := []string{"sensor-0", "sensor-1"}
 
-	runRealtimeMulti(context.Background(), newRand(), fieldFns, scales, 0, 0, 0, 0, sink, devices, 0, 2, 1, 0)
+	makers := multiFieldMakers(newRand(), fieldFns, scales, 0, 0, 0)
+	runRealtime(context.Background(), newRand(), makers, sink, devices, 0, 2, 1, 0, 0)
 
 	if len(sink.points) != 4 {
 		t.Fatalf("expected 4 points (2 devices × 2 steps), got %d", len(sink.points))
@@ -134,7 +135,8 @@ func TestRunRealtimeMultiCancellation(t *testing.T) {
 	fieldFns := map[string]func(float64) float64{
 		"temperature": func(x float64) float64 { return 22.0 },
 	}
-	runRealtimeMulti(ctx, newRand(), fieldFns, []float64{1.0}, 0, 0, 0, 0, sink, []string{"sensor-0"}, 0, 100, 10, 0)
+	makers := multiFieldMakers(newRand(), fieldFns, []float64{1.0}, 0, 0, 0)
+	runRealtime(ctx, newRand(), makers, sink, []string{"sensor-0"}, 0, 100, 10, 0, 0)
 
 	if len(sink.points) != 0 {
 		t.Errorf("expected 0 points after immediate cancellation, got %d", len(sink.points))
@@ -173,22 +175,22 @@ func TestEvalFields(t *testing.T) {
 func TestDropoutRateSkipsPoints(t *testing.T) {
 	fn := func(x float64) float64 { return 1.0 }
 	devices := []string{"dev"}
-	fns := []func(float64) float64{fn}
+	makers := singleFieldMakers([]func(float64) float64{fn})
 
 	sink := &captureSink{}
-	runBatch(seededRand(1), fns, sink, devices, time.Now().Unix(), 100, 1, 1.0, 0)
+	runBatch(seededRand(1), makers, sink, devices, time.Now().Unix(), 100, 1, 1.0, 0)
 	if len(sink.points) != 0 {
 		t.Errorf("dropout-rate=1.0: expected 0 points, got %d", len(sink.points))
 	}
 
 	sink = &captureSink{}
-	runBatch(seededRand(1), fns, sink, devices, time.Now().Unix(), 100, 1, 0.0, 0)
+	runBatch(seededRand(1), makers, sink, devices, time.Now().Unix(), 100, 1, 0.0, 0)
 	if len(sink.points) != 100 {
 		t.Errorf("dropout-rate=0: expected 100 points, got %d", len(sink.points))
 	}
 
 	sink = &captureSink{}
-	runBatch(seededRand(1), fns, sink, devices, time.Now().Unix(), 1000, 1, 0.5, 0)
+	runBatch(seededRand(1), makers, sink, devices, time.Now().Unix(), 1000, 1, 0.5, 0)
 	if len(sink.points) < 400 || len(sink.points) > 600 {
 		t.Errorf("dropout-rate=0.5: expected ~500 points, got %d", len(sink.points))
 	}
@@ -198,11 +200,11 @@ func TestDropoutRateMultiField(t *testing.T) {
 	fieldFns := map[string]func(float64) float64{
 		"temperature": func(x float64) float64 { return 22.0 },
 	}
-	scales := []float64{1.0}
 	devices := []string{"sensor-0"}
 
 	sink := &captureSink{}
-	runBatchMulti(seededRand(1), fieldFns, scales, 0, 0, 0, 1.0, sink, devices, time.Now().Unix(), 100, 1, 0)
+	makers := multiFieldMakers(seededRand(1), fieldFns, []float64{1.0}, 0, 0, 0)
+	runBatch(seededRand(1), makers, sink, devices, time.Now().Unix(), 100, 1, 1.0, 0)
 	if len(sink.points) != 0 {
 		t.Errorf("multi dropout-rate=1.0: expected 0 points, got %d", len(sink.points))
 	}
@@ -216,7 +218,7 @@ func TestSpreadProducesDifferentValues(t *testing.T) {
 		func(x float64) float64 { return base * 1.1 },
 	}
 	devices := []string{"sensor-0", "sensor-1"}
-	runBatch(newRand(), fns, sink, devices, time.Now().Unix(), 1, 60, 0, 0)
+	runBatch(newRand(), singleFieldMakers(fns), sink, devices, time.Now().Unix(), 1, 60, 0, 0)
 
 	if *sink.points[0].Value == *sink.points[1].Value {
 		t.Error("expected different values for devices with different scale factors")
@@ -269,11 +271,10 @@ func TestStatsSinkCountsErrors(t *testing.T) {
 func TestRateCapBatch(t *testing.T) {
 	sink := &captureSink{}
 	fn := func(x float64) float64 { return 1.0 }
-	fns := []func(float64) float64{fn}
 
 	// rate=20 for 5 points → 4 inter-point delays of 50 ms each = 200 ms minimum.
 	start := time.Now()
-	runBatch(newRand(), fns, sink, []string{"dev"}, time.Now().Unix(), 5, 1, 0, 20)
+	runBatch(newRand(), singleFieldMakers([]func(float64) float64{fn}), sink, []string{"dev"}, time.Now().Unix(), 5, 1, 0, 20)
 	elapsed := time.Since(start)
 
 	if len(sink.points) != 5 {
@@ -287,16 +288,14 @@ func TestRateCapBatch(t *testing.T) {
 func TestCountModeEmitsExactPoints(t *testing.T) {
 	sink := &captureSink{}
 	fn := func(x float64) float64 { return 1.0 }
-	fns := []func(float64) float64{fn}
 	count := 7
 	stepSeconds := 60
 	start := time.Now().Unix()
-	runBatch(newRand(), fns, sink, []string{"dev"}, start, count, stepSeconds, 0, 0)
+	runBatch(newRand(), singleFieldMakers([]func(float64) float64{fn}), sink, []string{"dev"}, start, count, stepSeconds, 0, 0)
 
 	if len(sink.points) != count {
 		t.Fatalf("expected %d points, got %d", count, len(sink.points))
 	}
-	// Timestamps should be continuous with the given step.
 	for i, dp := range sink.points {
 		expected := start + int64(i*stepSeconds)
 		if dp.Timestamp != expected {
@@ -314,7 +313,7 @@ func TestCountModeFleet(t *testing.T) {
 		func(x float64) float64 { return 2.0 },
 		func(x float64) float64 { return 3.0 },
 	}
-	runBatch(newRand(), fns, sink, devices, time.Now().Unix(), count, 60, 0, 0)
+	runBatch(newRand(), singleFieldMakers(fns), sink, devices, time.Now().Unix(), count, 60, 0, 0)
 
 	if len(sink.points) != count*len(devices) {
 		t.Fatalf("expected %d points, got %d", count*len(devices), len(sink.points))
@@ -333,11 +332,10 @@ func TestCountModeFleet(t *testing.T) {
 func TestRateCapZeroIsUnlimited(t *testing.T) {
 	sink := &captureSink{}
 	fn := func(x float64) float64 { return 1.0 }
-	fns := []func(float64) float64{fn}
 
 	// With rate=0 (unlimited) 1000 points should complete almost instantly.
 	start := time.Now()
-	runBatch(newRand(), fns, sink, []string{"dev"}, time.Now().Unix(), 1000, 1, 0, 0)
+	runBatch(newRand(), singleFieldMakers([]func(float64) float64{fn}), sink, []string{"dev"}, time.Now().Unix(), 1000, 1, 0, 0)
 	elapsed := time.Since(start)
 
 	if len(sink.points) != 1000 {
@@ -352,8 +350,9 @@ func TestRateCapZeroIsUnlimited(t *testing.T) {
 
 func TestRunBatchGeoEmitsLatLon(t *testing.T) {
 	sink := &captureSink{}
-	walker := NewGeoWalker(48.8566, 2.3522, 0, 10, 0)
-	runBatchGeo(newRand(), []*GeoWalker{walker}, sink, []string{"truck-0"}, time.Now().Unix(), 5, 60, 0, 0)
+	walkers := []*GeoWalker{NewGeoWalker(48.8566, 2.3522, 0, 10, 0)}
+	makers := geoMakers(newRand(), walkers, 60)
+	runBatch(newRand(), makers, sink, []string{"truck-0"}, time.Now().Unix(), 5, 60, 0, 0)
 
 	if len(sink.points) != 5 {
 		t.Fatalf("expected 5 points, got %d", len(sink.points))
@@ -381,7 +380,8 @@ func TestRunBatchGeoFleet(t *testing.T) {
 		NewGeoWalker(51.5074, -0.1278, 90, 5, 0),
 	}
 	devices := []string{"truck-0", "truck-1"}
-	runBatchGeo(newRand(), walkers, sink, devices, time.Now().Unix(), 3, 60, 0, 0)
+	makers := geoMakers(newRand(), walkers, 60)
+	runBatch(newRand(), makers, sink, devices, time.Now().Unix(), 3, 60, 0, 0)
 
 	if len(sink.points) != 6 {
 		t.Fatalf("expected 6 points (2 devices × 3 steps), got %d", len(sink.points))
@@ -402,8 +402,9 @@ func TestRunRealtimeGeoCancellation(t *testing.T) {
 	cancel()
 
 	sink := &captureSink{}
-	walker := NewGeoWalker(48.8566, 2.3522, 0, 10, 0)
-	runRealtimeGeo(ctx, newRand(), []*GeoWalker{walker}, sink, []string{"truck-0"}, 0, 100, 10, 0, 0)
+	walkers := []*GeoWalker{NewGeoWalker(48.8566, 2.3522, 0, 10, 0)}
+	makers := geoMakers(newRand(), walkers, 10)
+	runRealtime(ctx, newRand(), makers, sink, []string{"truck-0"}, 0, 100, 10, 0, 0)
 
 	if len(sink.points) != 0 {
 		t.Errorf("expected 0 points after cancellation, got %d", len(sink.points))

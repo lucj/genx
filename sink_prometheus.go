@@ -24,7 +24,6 @@ type PrometheusSink struct {
 	mu         sync.RWMutex
 	gauges     map[string]map[string]prometheusGauge // metric → device → gauge
 	server     *http.Server
-	errCh      chan error
 }
 
 func NewPrometheusSink(port int, metricName string) (*PrometheusSink, error) {
@@ -35,31 +34,16 @@ func NewPrometheusSink(port int, metricName string) (*PrometheusSink, error) {
 	s := &PrometheusSink{
 		metricName: metricName,
 		gauges:     make(map[string]map[string]prometheusGauge),
-		errCh:      make(chan error, 1),
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", s.handleMetrics)
 
-	s.server = &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+	srv, err := startHTTPServer(port, mux)
+	if err != nil {
+		return nil, fmt.Errorf("prometheus: %w", err)
 	}
-
-	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.errCh <- err
-		}
-	}()
-
-	// Brief pause to surface immediate startup errors (e.g. port already in use).
-	select {
-	case err := <-s.errCh:
-		return nil, fmt.Errorf("prometheus listener: %w", err)
-	case <-time.After(50 * time.Millisecond):
-	}
+	s.server = srv
 
 	return s, nil
 }

@@ -13,8 +13,9 @@ import (
 // KafkaSink publishes each data point as a JSON message to a Kafka topic.
 // The device name is used as the message key for consistent per-device partitioning.
 type KafkaSink struct {
-	writer *kafka.Writer
-	render Renderer
+	writer  *kafka.Writer
+	topicFn func(DataPoint) string
+	render  Renderer
 }
 
 func NewKafkaSink(brokers, topic, username, password string, tlsEnabled, tlsInsecure bool, render Renderer) (*KafkaSink, error) {
@@ -25,11 +26,17 @@ func NewKafkaSink(brokers, topic, username, password string, tlsEnabled, tlsInse
 		return nil, fmt.Errorf("--kafka-topic must not be empty")
 	}
 
+	topicFn, err := compileTopic(topic)
+	if err != nil {
+		return nil, err
+	}
+
 	brokerList := parseBrokers(brokers)
 
+	// Topic is left empty so each message can carry its own topic, which
+	// supports template patterns like "sensors/{{.Device}}".
 	w := &kafka.Writer{
 		Addr:     kafka.TCP(brokerList...),
-		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 	}
 
@@ -44,7 +51,7 @@ func NewKafkaSink(brokers, topic, username, password string, tlsEnabled, tlsInse
 		w.Transport = t
 	}
 
-	return &KafkaSink{writer: w, render: render}, nil
+	return &KafkaSink{writer: w, topicFn: topicFn, render: render}, nil
 }
 
 func (s *KafkaSink) Send(dp DataPoint) error {
@@ -53,6 +60,7 @@ func (s *KafkaSink) Send(dp DataPoint) error {
 		return err
 	}
 	return s.writer.WriteMessages(context.Background(), kafka.Message{
+		Topic: s.topicFn(dp),
 		Key:   []byte(dp.Device),
 		Value: b,
 	})

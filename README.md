@@ -24,9 +24,10 @@ git clone https://github.com/lucj/genx.git && cd genx && go build -o genx .
 ## Quick start
 
 ```bash
-genx --type cos --min 18 --max 26 --duration 1h --step 15m
-{"device":"device","timestamp":1715000000,"value":26.00}
-{"device":"device","timestamp":1715054400,"value":22.00}
+# Realtime cosine wave — one point every 5 s for 1 minute (defaults)
+genx --type cos --min 18 --max 26
+{"device":"sensor","timestamp":1715000000,"value":26.00}
+{"device":"sensor","timestamp":1715000005,"value":25.98}
 ...
 ```
 
@@ -131,14 +132,18 @@ genx --type walk --from $(date -d '24 hours ago' +%s) --duration 24h --step 5m
 
 Accepted formats: ISO 8601 with timezone (`2024-01-01T00:00:00Z`), date only (`2024-01-01`, treated as midnight UTC), or a Unix epoch integer. Defaults to now.
 
-`--from` applies to batch mode. In realtime mode timestamps follow the wall clock.
+`--from` controls the timestamp origin in both batch and realtime modes. In realtime mode the pacing still follows the wall clock, but every emitted timestamp is anchored to `--from` rather than the current time.
 
 ## Realtime mode & reproducibility
 
-By default genx generates the full dataset instantly. Add `--realtime` to pace output to one point per `--step` interval. Use `--seed` to fix the RNG for reproducible runs.
+Realtime mode is on by default — genx emits one point per `--step` interval paced to the wall clock, with the first point appearing immediately. Pass `--realtime=false` to generate the full dataset in one burst. Use `--seed` to fix the RNG for reproducible runs.
 
 ```bash
-genx --type cos --step 10s --realtime
+# Default: realtime, step=5s, duration=1m
+genx --type cos
+# Burst mode (generate all at once)
+genx --type cos --realtime=false --duration 1h --step 5m
+# Reproducible run
 genx --type cos --noise 0.05 --devices 3 --seed 42 --duration 1h --step 5m
 ```
 
@@ -237,6 +242,11 @@ genx --output webhook --webhook-url http://myserver/ingest --webhook-token mysec
 ```bash
 genx --output nats --nats-url nats://localhost:4222 --nats-subject sensors.temp \
      --type cos --duration 1h --step 1m
+
+# Per-device subjects using Go template syntax
+genx --output nats --nats-url nats://localhost:4222 \
+     --nats-subject 'sensors.{{.Device}}' \
+     --devices 3 --type cos --step 5s
 ```
 
 ### MQTT
@@ -245,6 +255,11 @@ genx --output nats --nats-url nats://localhost:4222 --nats-subject sensors.temp 
 # Plain
 genx --output mqtt --mqtt-broker tcp://localhost:1883 --mqtt-topic home/temp \
      --type cos --duration 1h --step 5m
+
+# Per-device topics using Go template syntax
+genx --output mqtt --mqtt-broker tcp://localhost:1883 \
+     --mqtt-topic 'sensors/{{.Device}}' \
+     --devices 3 --type cos --step 5s
 
 # TLS
 genx --output mqtt --mqtt-broker ssl://localhost:8883 --mqtt-ca-cert ca.crt \
@@ -264,10 +279,15 @@ Per-device certificates are supported via a YAML config file — see `genx --gen
 genx --output kafka --kafka-brokers localhost:9092 --kafka-topic sensors \
      --type cos --duration 1h --step 5m
 
+# Per-device topics using Go template syntax
+genx --output kafka --kafka-brokers localhost:9092 \
+     --kafka-topic 'sensors.{{.Device}}' \
+     --devices 3 --type cos --step 5s
+
 # SASL/PLAIN + TLS
 genx --output kafka --kafka-brokers localhost:9092 --kafka-topic sensors \
      --kafka-username alice --kafka-password secret --kafka-tls \
-     --type cos --step 5s --realtime
+     --type cos --step 5s
 ```
 
 ### File (with rotation)
@@ -563,7 +583,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--nats-url` | `nats://localhost:4222` | NATS server URL |
-| `--nats-subject` | `genx` | Subject to publish to |
+| `--nats-subject` | `genx` | Subject to publish to; supports `{{.Device}}` template |
 | `--nats-user` | | Username |
 | `--nats-password` | | Password |
 | `--nats-token` | | Authentication token |
@@ -573,7 +593,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--mqtt-broker` | `tcp://localhost:1883` | Broker URL |
-| `--mqtt-topic` | `genx` | Topic to publish to |
+| `--mqtt-topic` | `genx` | Topic to publish to; supports `{{.Device}}` template |
 | `--mqtt-qos` | `0` | QoS level (0, 1, or 2) |
 | `--mqtt-client-id` | `genx-<pid>` | Client ID |
 | `--mqtt-user` | | Username |
@@ -588,7 +608,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--kafka-brokers` | `localhost:9092` | Comma-separated broker addresses |
-| `--kafka-topic` | `genx` | Topic to publish to |
+| `--kafka-topic` | `genx` | Topic to publish to; supports `{{.Device}}` template |
 | `--kafka-username` | | SASL/PLAIN username |
 | `--kafka-password` | | SASL/PLAIN password |
 | `--kafka-tls` | false | Enable TLS (uses system cert pool) |

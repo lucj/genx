@@ -16,12 +16,17 @@ import (
 type MqttSink struct {
 	defaultClient mqtt.Client
 	deviceClients map[string]mqtt.Client // keyed by device name; nil when unused
-	topic         string
+	topicFn       func(DataPoint) string
 	qos           byte
 	render        Renderer
 }
 
 func NewMqttSink(broker, topic, clientID string, qos int, user, password, caFile, certFile, keyFile string, tlsInsecure bool, deviceCerts map[string]MqttDeviceCert, render Renderer) (*MqttSink, error) {
+	topicFn, err := compileTopic(topic)
+	if err != nil {
+		return nil, err
+	}
+
 	defaultClient, err := newMQTTClient(broker, clientID, user, password, caFile, certFile, keyFile, tlsInsecure)
 	if err != nil {
 		return nil, err
@@ -49,7 +54,7 @@ func NewMqttSink(broker, topic, clientID string, qos int, user, password, caFile
 	return &MqttSink{
 		defaultClient: defaultClient,
 		deviceClients: deviceClients,
-		topic:         topic,
+		topicFn:       topicFn,
 		qos:           byte(qos),
 		render:        render,
 	}, nil
@@ -121,7 +126,7 @@ func (s *MqttSink) Send(dp DataPoint) error {
 	if c, ok := s.deviceClients[dp.Device]; ok {
 		client = c
 	}
-	token := client.Publish(s.topic, s.qos, false, b)
+	token := client.Publish(s.topicFn(dp), s.qos, false, b)
 	if !token.WaitTimeout(10 * time.Second) {
 		return fmt.Errorf("MQTT publish timed out")
 	}

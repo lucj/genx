@@ -3,6 +3,7 @@ set -euo pipefail
 
 PROFILES=(
   test-webhook
+  test-cloudevent
   test-mqtt
   test-mqtt-auth
   test-mqtt-tls
@@ -10,6 +11,7 @@ PROFILES=(
   test-nats
   test-nats-userpass
   test-nats-token
+  test-kafka
 )
 
 passed=()
@@ -31,7 +33,7 @@ done
 
 echo ""
 echo "=== Results ==="
-for p in "${passed[@]:-}"; do echo "  PASS  $p"; done
-for f in "${failed[@]:-}"; do echo "  FAIL  $f"; done
+for p in "${passed[@]}"; do echo "  PASS  $p"; done
+for f in "${failed[@]}"; do echo "  FAIL  $f"; done
 
 [[ ${#failed[@]} -eq 0 ]]

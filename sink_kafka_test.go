@@ -36,6 +36,27 @@ func TestNewKafkaSinkValidation(t *testing.T) {
 	if _, err := NewKafkaSink("localhost:9092", "", "", "", false, false, JSONRenderer); err == nil {
 		t.Error("expected error for empty topic, got nil")
 	}
+	// Invalid template syntax must be rejected at construction time.
+	if _, err := NewKafkaSink("localhost:9092", "{{.Unclosed", "", "", false, false, JSONRenderer); err == nil {
+		t.Error("expected error for invalid topic template, got nil")
+	}
+}
+
+func TestNewKafkaSinkTemplateTopic(t *testing.T) {
+	sink, err := NewKafkaSink("localhost:9092", "sensors.{{.Device}}", "", "", false, false, JSONRenderer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer sink.Close()
+
+	dp0 := DataPoint{Device: "sensor-0", Timestamp: 1000}
+	dp1 := DataPoint{Device: "sensor-1", Timestamp: 1001}
+	if got := sink.topicFn(dp0); got != "sensors.sensor-0" {
+		t.Errorf("topicFn(sensor-0): got %q", got)
+	}
+	if got := sink.topicFn(dp1); got != "sensors.sensor-1" {
+		t.Errorf("topicFn(sensor-1): got %q", got)
+	}
 }
 
 func TestNewKafkaSinkCreates(t *testing.T) {

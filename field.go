@@ -21,103 +21,62 @@ type FieldConfig struct {
 	DutyCycle *float64 `yaml:"duty-cycle"`
 }
 
+// resolvePeriod returns the parsed duration of periodStr, or fallback if empty.
+func resolvePeriod(periodStr string, fallback int) (int, error) {
+	if periodStr == "" {
+		return fallback, nil
+	}
+	p, err := GetSeconds(periodStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid period: %w", err)
+	}
+	return p, nil
+}
+
+// ptrOr dereferences p if non-nil, otherwise returns def.
+func ptrOr[T any](p *T, def T) T {
+	if p == nil {
+		return def
+	}
+	return *p
+}
+
 // buildFieldFn constructs a curve function from a FieldConfig.
 // rng is only consumed when fc.Type is "walk".
 func buildFieldFn(rng *rand.Rand, fc FieldConfig, start int64, durationSeconds int) (func(float64) float64, error) {
 	switch fc.Type {
 	case "linear":
-		first := 0.0
-		if fc.First != nil {
-			first = *fc.First
-		}
-		last := 1.0
-		if fc.Last != nil {
-			last = *fc.Last
-		}
-		return GetLinear(first, last, start, durationSeconds), nil
+		return GetLinear(ptrOr(fc.First, 0.0), ptrOr(fc.Last, 1.0), start, durationSeconds), nil
 	case "cos":
-		min := 0.0
-		if fc.Min != nil {
-			min = *fc.Min
+		period, err := resolvePeriod(fc.Period, durationSeconds)
+		if err != nil {
+			return nil, err
 		}
-		max := 1.0
-		if fc.Max != nil {
-			max = *fc.Max
-		}
-		period := durationSeconds
-		if fc.Period != "" {
-			var err error
-			period, err = GetSeconds(fc.Period)
-			if err != nil {
-				return nil, fmt.Errorf("invalid period: %w", err)
-			}
-		}
-		return GetCosinus(min, max, period), nil
+		return GetCosinus(ptrOr(fc.Min, 0.0), ptrOr(fc.Max, 1.0), period), nil
 	case "log":
 		return GetLog(start), nil
 	case "exp":
 		return GetExp(start, durationSeconds), nil
 	case "sawtooth":
-		min := 0.0
-		if fc.Min != nil {
-			min = *fc.Min
+		period, err := resolvePeriod(fc.Period, durationSeconds)
+		if err != nil {
+			return nil, err
 		}
-		max := 1.0
-		if fc.Max != nil {
-			max = *fc.Max
-		}
-		period := durationSeconds
-		if fc.Period != "" {
-			var err error
-			period, err = GetSeconds(fc.Period)
-			if err != nil {
-				return nil, fmt.Errorf("invalid period: %w", err)
-			}
-		}
-		return GetSawtooth(min, max, start, period), nil
+		return GetSawtooth(ptrOr(fc.Min, 0.0), ptrOr(fc.Max, 1.0), start, period), nil
 	case "square":
-		min := 0.0
-		if fc.Min != nil {
-			min = *fc.Min
+		period, err := resolvePeriod(fc.Period, durationSeconds)
+		if err != nil {
+			return nil, err
 		}
-		max := 1.0
-		if fc.Max != nil {
-			max = *fc.Max
-		}
-		period := durationSeconds
-		if fc.Period != "" {
-			var err error
-			period, err = GetSeconds(fc.Period)
-			if err != nil {
-				return nil, fmt.Errorf("invalid period: %w", err)
-			}
-		}
-		dutyCycle := 0.5
-		if fc.DutyCycle != nil {
-			dutyCycle = *fc.DutyCycle
-		}
-		return GetSquare(min, max, start, period, dutyCycle), nil
+		return GetSquare(ptrOr(fc.Min, 0.0), ptrOr(fc.Max, 1.0), start, period, ptrOr(fc.DutyCycle, 0.5)), nil
 	case "walk":
-		walkStart := 100.0
-		if fc.WalkStart != nil {
-			walkStart = *fc.WalkStart
-		}
-		step := 1.0
-		if fc.WalkStep != nil {
-			step = *fc.WalkStep
-		}
-		bias := 0.0
-		if fc.WalkBias != nil {
-			bias = *fc.WalkBias
-		}
-		wmin, wmax := 0.0, 0.0
-		if fc.Min != nil {
-			wmin = *fc.Min
-		}
-		if fc.Max != nil {
-			wmax = *fc.Max
-		}
-		return GetRandomWalk(rng, walkStart, step, bias, wmin, wmax), nil
+		return GetRandomWalk(rng,
+			ptrOr(fc.WalkStart, 100.0),
+			ptrOr(fc.WalkStep, 1.0),
+			ptrOr(fc.WalkBias, 0.0),
+			ptrOr(fc.Min, 0.0),
+			ptrOr(fc.Max, 0.0),
+		), nil
 	default:
 		return nil, fmt.Errorf("unknown type %q (use cos, linear, log, exp, walk, sawtooth, square)", fc.Type)
 	}
