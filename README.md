@@ -549,7 +549,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 |------|---------|-------------|
 | `--min` | `10` | Minimum value |
 | `--max` | `25` | Maximum value |
-| `--period` | `1d` | Period (e.g. `1d`, `12h`) |
+| `--period` | `10m` | Period (e.g. `10m`, `1h`, `1d`) |
 | `--duty-cycle` | `0.5` | Fraction of period in high state (square only) |
 
 ### Linear curve (`--type linear`)

@@ -151,7 +151,7 @@ func registerFlags(cmd *cobra.Command, v *cliFlags) {
 	// Periodic curves
 	f.Float64Var(&v.cosMin, "min", 10, "minimum value (cos, sawtooth, square)")
 	f.Float64Var(&v.cosMax, "max", 25, "maximum value (cos, sawtooth, square)")
-	f.StringVar(&v.cosPeriod, "period", "1d", "period (cos, sawtooth, square), e.g. 1d, 12h")
+	f.StringVar(&v.cosPeriod, "period", "10m", "period (cos, sawtooth, square), e.g. 10m, 1h, 1d")
 	f.Float64Var(&v.dutyCycle, "duty-cycle", 0.5, "fraction of period in high state, e.g. 0.3 = 30% on (square)")
 
 	// Linear
@@ -379,7 +379,7 @@ func defaultCLIFlags() *cliFlags {
 		device:            "device",
 		devices:           1,
 		anomalyFactor:     3.0,
-		cosPeriod:         "1d",
+		cosPeriod:         "10m",
 		dutyCycle:         0.5,
 		cosMin:            10,
 		cosMax:            25,

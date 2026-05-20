@@ -29,7 +29,7 @@ rate: 0          # max points per second across all devices (0 = unlimited)
 # Cosine / sawtooth / square parameters
 min: 10
 max: 25
-period: 1d
+period: 10m
 # duty-cycle: 0.5  # fraction of period in high state (square wave only)
 
 # Linear parameters (type: linear)
