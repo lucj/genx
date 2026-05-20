@@ -24,9 +24,22 @@ func TestGetLinear(t *testing.T) {
 
 func TestGetCosinus(t *testing.T) {
 	min, max := 10.0, 25.0
-	fn := GetCosinus(min, max, 86400)
-
 	start := time.Now().Unix()
+	fn := GetCosinus(min, max, start, 86400)
+
+	// Starts at max.
+	if got := fn(float64(start)); math.Abs(got-max) > 1e-9 {
+		t.Errorf("at start: got %f, want %f (max)", got, max)
+	}
+	// Reaches min at half-period.
+	if got := fn(float64(start + 43200)); math.Abs(got-min) > 1e-9 {
+		t.Errorf("at half-period: got %f, want %f (min)", got, min)
+	}
+	// Returns to max at full period.
+	if got := fn(float64(start + 86400)); math.Abs(got-max) > 1e-9 {
+		t.Errorf("at full period: got %f, want %f (max)", got, max)
+	}
+	// All values stay within [min, max].
 	for i := 0; i < 100; i++ {
 		x := float64(start + int64(i*864))
 		v := fn(x)

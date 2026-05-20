@@ -52,7 +52,7 @@ func buildFieldFn(rng *rand.Rand, fc FieldConfig, start int64, durationSeconds i
 		if err != nil {
 			return nil, err
 		}
-		return GetCosinus(ptrOr(fc.Min, 0.0), ptrOr(fc.Max, 1.0), period), nil
+		return GetCosinus(ptrOr(fc.Min, 0.0), ptrOr(fc.Max, 1.0), start, period), nil
 	case "log":
 		return GetLog(start), nil
 	case "exp":

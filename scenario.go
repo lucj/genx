@@ -105,7 +105,7 @@ func buildPhaseFns(rng *rand.Rand, pp phaseParams, devices int, spread float64, 
 		if err != nil {
 			return nil, fmt.Errorf("invalid period: %w", err)
 		}
-		baseFn = GetCosinus(pp.cosMin, pp.cosMax, periodSeconds)
+		baseFn = GetCosinus(pp.cosMin, pp.cosMax, phaseStart, periodSeconds)
 	case "sawtooth":
 		periodSeconds, err := GetSeconds(pp.cosPeriod)
 		if err != nil {

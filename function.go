@@ -13,12 +13,15 @@ func GetLinear(first, last float64, start int64, durationSeconds int) func(float
 	}
 }
 
-func GetCosinus(min, max float64, periodSeconds int) func(float64) float64 {
+// GetCosinus returns a cosine wave anchored to start: the curve begins at max
+// at t=start, reaches min at t=start+period/2, and returns to max at t=start+period.
+func GetCosinus(min, max float64, start int64, periodSeconds int) func(float64) float64 {
 	A := (max - min) / 2
 	B := 2 * math.Pi / float64(periodSeconds)
 	D := min + A
+	S := float64(start)
 	return func(x float64) float64 {
-		return A*math.Cos(B*x) + D
+		return A*math.Cos(B*(x-S)) + D
 	}
 }
 

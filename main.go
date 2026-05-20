@@ -443,7 +443,7 @@ func run(cmd *cobra.Command, v *cliFlags) error {
 		if err != nil {
 			return fmt.Errorf("invalid --period: %w", err)
 		}
-		baseFn = GetCosinus(v.cosMin, v.cosMax, periodSeconds)
+		baseFn = GetCosinus(v.cosMin, v.cosMax, start, periodSeconds)
 	case "sawtooth":
 		periodSeconds, err := GetSeconds(v.cosPeriod)
 		if err != nil {
