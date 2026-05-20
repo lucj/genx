@@ -416,7 +416,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					}
 				}
 				if v.realtime {
-					runRealtimeMulti(ctx, rng, fieldFns, scales, v.noise, v.anomalyRate, v.anomalyFactor, v.dropoutRate, sink, deviceNames, itemCount, stepSeconds, v.rate)
+					runRealtimeMulti(ctx, rng, fieldFns, scales, v.noise, v.anomalyRate, v.anomalyFactor, v.dropoutRate, sink, deviceNames, start, itemCount, stepSeconds, v.rate)
 				} else {
 					runBatchMulti(rng, fieldFns, scales, v.noise, v.anomalyRate, v.anomalyFactor, v.dropoutRate, sink, deviceNames, start, itemCount, stepSeconds, v.rate)
 				}
@@ -431,7 +431,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 					walkers[i] = NewGeoWalker(v.geoLat, v.geoLon, v.geoBearing, v.geoSpeed, v.geoDrift)
 				}
 				if v.realtime {
-					runRealtimeGeo(ctx, rng, walkers, sink, deviceNames, itemCount, stepSeconds, v.dropoutRate, v.rate)
+					runRealtimeGeo(ctx, rng, walkers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
 				} else {
 					runBatchGeo(rng, walkers, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
 				}
@@ -490,7 +490,7 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				}
 			}
 			if v.realtime {
-				runRealtime(ctx, rng, fns, sink, deviceNames, itemCount, stepSeconds, v.dropoutRate, v.rate)
+				runRealtime(ctx, rng, fns, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
 			} else {
 				runBatch(rng, fns, sink, deviceNames, start, itemCount, stepSeconds, v.dropoutRate, v.rate)
 			}
