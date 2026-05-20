@@ -358,7 +358,10 @@ Use --config to load a YAML config file; CLI flags override any config value.`,
 				itemCount = durationSeconds / stepSeconds
 			}
 
-			start := time.Now().Unix()
+			start, err := ParseFromTime(v.from)
+			if err != nil {
+				return fmt.Errorf("--from: %w", err)
+			}
 
 			// Resolve device names: explicit list takes precedence over --device / --devices.
 			var deviceNames []string

@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Type     string   `yaml:"type"`
 	Duration string   `yaml:"duration"`
+	From     string   `yaml:"from"`
 	Step     string   `yaml:"step"`
 	Device      string   `yaml:"device"`
 	Devices     *int     `yaml:"devices"`

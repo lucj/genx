@@ -11,6 +11,7 @@ const sampleConfig = `# genx sample configuration
 # ---------------------------------------------------------------------------
 type: cos        # cos | linear | log | exp | walk | sawtooth | square | geo
 duration: 1h     # total duration  — units: d, h, m, s  (e.g. 2d, 30m)
+# from: 2024-01-01T00:00:00Z  # start timestamp: ISO 8601, date, or Unix epoch; defaults to now
 step: 1m         # sampling interval
 device: sensor   # device name, or prefix when devices > 1
 devices: 1       # number of devices to simulate simultaneously

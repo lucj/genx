@@ -117,6 +117,22 @@ sent 360 points in 30.1s (11.9 pts/s, 0 errors)
 
 This lets you verify throughput and catch send errors without digging through logs — particularly useful when load-testing a sink.
 
+## Historical data generation
+
+Use `--from` to anchor the dataset to a specific point in time — useful for generating historical data that aligns with real calendar dates:
+
+```bash
+# One week of hourly data starting 2024-01-01
+genx --type cos --from 2024-01-01T00:00:00Z --duration 7d --step 1h
+
+# Last 24 hours of data (Unix epoch)
+genx --type walk --from $(date -d '24 hours ago' +%s) --duration 24h --step 5m
+```
+
+Accepted formats: ISO 8601 with timezone (`2024-01-01T00:00:00Z`), date only (`2024-01-01`, treated as midnight UTC), or a Unix epoch integer. Defaults to now.
+
+`--from` applies to batch mode. In realtime mode timestamps follow the wall clock.
+
 ## Realtime mode & reproducibility
 
 By default genx generates the full dataset instantly. Add `--realtime` to pace output to one point per `--step` interval. Use `--seed` to fix the RNG for reproducible runs.
@@ -469,6 +485,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 | `--generate-config` | | Print a sample YAML config file to stdout and exit |
 | `--type` | `walk` | Curve type: `cos`, `linear`, `log`, `exp`, `walk`, `sawtooth`, `square` |
 | `--duration` | `1d` | Total duration (e.g. `2d`, `6h`, `30m`) |
+| `--from` | now | Start timestamp: ISO 8601 (`2024-01-01T00:00:00Z`), date (`2024-01-01`), or Unix epoch |
 | `--step` | `1h` | Sampling interval (e.g. `5m`, `10s`) |
 | `--device` | `device` | Device name (or prefix when `--devices > 1`) |
 | `--devices` | `1` | Number of devices to simulate simultaneously |

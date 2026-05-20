@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -58,6 +59,16 @@ func newValidateCmd() *cobra.Command {
 				fmt.Printf("✓ Mode: replay from %s\n", v.replayFile)
 				fmt.Println("✓ All checks passed")
 				return nil
+			}
+
+			// Resolve and show start time.
+			startTs, err := ParseFromTime(v.from)
+			if err != nil {
+				fmt.Printf("✗ from: %v\n", err)
+				return err
+			}
+			if v.from != "" {
+				fmt.Printf("✓ From: %s\n", time.Unix(startTs, 0).UTC().Format(time.RFC3339))
 			}
 
 			// Resolve step (shared across modes).
