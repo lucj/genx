@@ -15,50 +15,51 @@ with st.sidebar:
     curve_type = st.selectbox(
         "Type",
         ["cos", "walk", "linear", "sawtooth", "square", "exp", "log"],
+        key="curve_type",
     )
-    duration = st.selectbox("Duration", ["15m", "1h", "6h", "1d", "7d"], index=1)
-    step = st.selectbox("Step", ["10s", "1m", "5m", "15m", "1h"], index=2)
-    devices = st.number_input("Devices", min_value=1, max_value=20, value=1)
-    spread = st.slider("Spread", 0.0, 0.5, 0.0, 0.05) if devices > 1 else 0.0
+    duration = st.selectbox("Duration", ["15m", "1h", "6h", "1d", "7d"], index=1, key="duration")
+    step = st.selectbox("Step", ["10s", "1m", "5m", "15m", "1h"], index=2, key="step")
+    devices = st.number_input("Devices", min_value=1, max_value=20, value=1, key="devices")
+    spread = st.slider("Spread", 0.0, 0.5, 0.0, 0.05, key="spread") if devices > 1 else 0.0
 
     if curve_type in ("cos", "sawtooth", "square"):
         st.subheader("Curve parameters")
         c1, c2 = st.columns(2)
-        min_val = c1.number_input("Min", value=10.0)
-        max_val = c2.number_input("Max", value=25.0)
+        min_val = c1.number_input("Min", value=10.0, key="min_val")
+        max_val = c2.number_input("Max", value=25.0, key="max_val")
         # cos: period = duration → one full cycle; sawtooth/square: short period → multiple cycles visible.
         period_default = {"cos": 1, "sawtooth": 0, "square": 0}
         period = st.selectbox("Period", ["15m", "1h", "6h", "12h", "1d"],
-                              index=period_default.get(curve_type, 1))
+                              index=period_default.get(curve_type, 1), key="period")
         if curve_type == "square":
-            duty_cycle = st.slider("Duty cycle", 0.1, 0.9, 0.5, 0.05)
+            duty_cycle = st.slider("Duty cycle", 0.1, 0.9, 0.5, 0.05, key="duty_cycle")
     elif curve_type == "linear":
         st.subheader("Curve parameters")
         c1, c2 = st.columns(2)
-        first_val = c1.number_input("First", value=0.0)
-        last_val = c2.number_input("Last", value=100.0)
+        first_val = c1.number_input("First", value=0.0, key="first_val")
+        last_val = c2.number_input("Last", value=100.0, key="last_val")
     elif curve_type == "walk":
         st.subheader("Walk parameters")
-        walk_start = st.number_input("Start", value=20.0)
-        walk_step_size = st.number_input("Step size", value=0.5, min_value=0.01)
-        walk_bias = st.number_input("Bias", value=0.0,
+        walk_start = st.number_input("Start", value=20.0, key="walk_start")
+        walk_step_size = st.number_input("Step size", value=0.5, min_value=0.01, key="walk_step_size")
+        walk_bias = st.number_input("Bias", value=0.0, key="walk_bias",
                                     help="Constant drift per step; negative = downward")
         c1, c2 = st.columns(2)
-        walk_min = c1.number_input("Min clamp", value=0.0,
+        walk_min = c1.number_input("Min clamp", value=0.0, key="walk_min",
                                    help="Lower bound; set both to 0 to disable clamping")
-        walk_max = c2.number_input("Max clamp", value=0.0,
+        walk_max = c2.number_input("Max clamp", value=0.0, key="walk_max",
                                    help="Upper bound; set both to 0 to disable clamping")
 
     st.subheader("Realism")
-    noise = st.slider("Noise", 0.0, 0.5, 0.0, 0.01)
-    anomaly_rate = st.slider("Anomaly rate", 0.0, 0.2, 0.0, 0.01)
+    noise = st.slider("Noise", 0.0, 0.5, 0.0, 0.01, key="noise")
+    anomaly_rate = st.slider("Anomaly rate", 0.0, 0.2, 0.0, 0.01, key="anomaly_rate")
     if anomaly_rate > 0:
-        anomaly_factor = st.slider("Anomaly factor", 1.5, 20.0, 3.0, 0.5,
+        anomaly_factor = st.slider("Anomaly factor", 1.5, 20.0, 3.0, 0.5, key="anomaly_factor",
                                    help="Spike = value × factor, drop = value ÷ factor")
-    dropout_rate = st.slider("Dropout rate", 0.0, 0.5, 0.0, 0.01)
+    dropout_rate = st.slider("Dropout rate", 0.0, 0.5, 0.0, 0.01, key="dropout_rate")
 
     st.subheader("Reproducibility")
-    seed = st.number_input("Seed (0 = random)", min_value=0, value=0)
+    seed = st.number_input("Seed (0 = random)", min_value=0, value=0, key="seed")
 
     generate = st.button("Generate", type="primary", use_container_width=True)
 
