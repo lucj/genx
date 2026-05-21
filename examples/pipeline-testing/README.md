@@ -7,7 +7,7 @@ it reliable for alerting rule validation or CI checks.
 ## 1. Record a dataset
 
 ```
-genx --config examples/pipeline-testing/record.yaml > recording.jsonl
+genx --config examples/pipeline-testing/config.yaml > recording.jsonl
 ```
 
 `recording.jsonl` now contains 60 JSON lines with a fixed anomaly pattern.
@@ -15,25 +15,41 @@ genx --config examples/pipeline-testing/record.yaml > recording.jsonl
 ## 2. Replay to stdout (verify the file)
 
 ```
-genx --replay-file recording.jsonl
+genx --replay-file recording.jsonl --realtime=false
 ```
 
-Batch mode — sends all points immediately, preserving original timestamps.
+Sends all 60 points immediately, preserving original timestamps.
 
 ## 3. Replay to a webhook
 
+Start a local echo server that prints every incoming request to its logs:
+
 ```
-genx --config examples/pipeline-testing/replay-webhook.yaml
+# terminal 1 — start the echo server (stays in foreground)
+docker run --rm -p 8080:8080 -e PORT=8080 ealen/echo-server
 ```
 
-Or inspect payloads with the bundled echo server:
+Or use the service defined in the root `compose.yaml`:
 
 ```
 # terminal 1
 docker compose up webhook
 
+# watch what arrives
+docker compose logs -f webhook
+```
+
+Then replay in a second terminal:
+
+```
 # terminal 2
-genx --replay-file recording.jsonl --output webhook --webhook-url http://localhost:8080
+genx --config examples/pipeline-testing/replay-webhook.yaml
+```
+
+Or pass flags directly:
+
+```
+genx --replay-file recording.jsonl --output webhook --webhook-url http://localhost:8080 --realtime=false
 ```
 
 ## 4. Replay to NATS in real time

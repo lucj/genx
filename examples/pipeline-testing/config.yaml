@@ -8,3 +8,4 @@ anomaly-factor: 4
 seed: 42
 duration: 1h
 step: 1m
+realtime: false
