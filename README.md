@@ -23,12 +23,21 @@ git clone https://github.com/lucj/genx.git && cd genx && go build -o genx .
 
 ## Quick start
 
+By default genx runs in **realtime mode**: it emits one point per `--step` interval (default `5s`) paced to the wall clock, for the full `--duration` (default `1m`). The output trickles out — one line every 5 seconds:
+
 ```bash
-# Realtime cosine wave — one point every 5 s for 1 minute (defaults)
 genx --type cos --min 18 --max 26
 {"device":"sensor","timestamp":1715000000,"value":26.00}
-{"device":"sensor","timestamp":1715000005,"value":25.98}
-...
+# … one line every 5 s for 1 minute
+```
+
+Add `--realtime=false` to emit the entire dataset at once:
+
+```bash
+genx --type cos --min 18 --max 26 --duration 1h --step 5m --realtime=false
+{"device":"sensor","timestamp":1715000000,"value":26.00}
+{"device":"sensor","timestamp":1715000300,"value":25.41}
+# … all 12 points in one burst
 ```
 
 Use `--generate-config` to print a fully commented YAML template covering every option:
