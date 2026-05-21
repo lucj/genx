@@ -38,14 +38,16 @@ Each point is a fully-formed CloudEvent:
 
 ## Try it on stdout first
 
+Add `--realtime=false` to get all points in one burst instead of one per 30 s:
+
 ```
-genx --config examples/cloudevents/config.yaml --output stdout
+genx --config examples/cloudevents/config.yaml --output stdout --realtime=false
 ```
 
 ## Use ISO timestamps inside data
 
 ```
-genx --config examples/cloudevents/config.yaml --output stdout --iso-time
+genx --config examples/cloudevents/config.yaml --output stdout --realtime=false --iso-time
 ```
 
 The `data.timestamp` field becomes an ISO 8601 string instead of a Unix integer.
