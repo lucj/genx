@@ -170,7 +170,7 @@ Accepted formats: ISO 8601 with timezone (`2024-01-01T00:00:00Z`), date only (`2
 Replay a previously recorded JSON-lines file through any configured sink:
 
 ```bash
-genx --type cos --duration 1h --step 1m > recording.jsonl
+genx --type cos --duration 1h --step 1m --realtime=false > recording.jsonl
 genx --replay-file recording.jsonl --output nats --nats-url nats://localhost:4222 --realtime --step 1m
 ```
 
@@ -601,7 +601,7 @@ docker run -i ghcr.io/lucj/genx --config - < config.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--output` | `stdout` | Sink: `stdout`, `webhook`, `nats`, `mqtt`, `kafka`, `file`, `otlp`, `prometheus`, `influxdb` |
+| `--output` | `stdout` | Sink: `stdout`, `webhook`, `nats`, `mqtt`, `kafka`, `file`, `otlp`, `prometheus`, `influxdb`, `http-server` |
 | `--format` | `json` | Format for stdout/file: `json`, `csv`, `influx`, `cloudevent` |
 | `--verbose` | false | Print `[OK]`/`[KO] <payload>` to stderr for every point sent |
 | `--iso-time` | false | Emit timestamp as ISO 8601 UTC string instead of Unix epoch |
