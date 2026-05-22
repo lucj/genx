@@ -7,6 +7,28 @@ Each data point is output as JSON by default:
 {"device":"sensor1","timestamp":1715000000,"value":24.53}
 ```
 
+## Contents
+
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Curve types](#curve-types)
+- [Geospatial simulation](#geospatial-simulation)
+- [Fleet mode](#fleet-mode)
+- [Noise and anomalies](#noise--anomalies)
+- [Run summary](#run-summary)
+- [Historical data generation](#historical-data-generation)
+- [Replay mode](#replay-mode)
+- [Output formats](#output-formats)
+- [Output sinks](#output-sinks)
+- [Scenario scripting](#scenario-scripting)
+- [Count mode](#count-mode)
+- [Verbose output](#verbose-output)
+- [Validate config](#validate-config)
+- [Multi-field payloads](#multi-field-payloads)
+- [Custom payload template](#custom-payload-template)
+- [YAML config file](#yaml-config-file)
+- [All flags](#all-flags)
+
 ## Installation
 
 **Docker (no install required):**
@@ -142,19 +164,6 @@ genx --type walk --from $(date -d '24 hours ago' +%s) --duration 24h --step 5m
 Accepted formats: ISO 8601 with timezone (`2024-01-01T00:00:00Z`), date only (`2024-01-01`, treated as midnight UTC), or a Unix epoch integer. Defaults to now.
 
 `--from` controls the timestamp origin in both batch and realtime modes. In realtime mode the pacing still follows the wall clock, but every emitted timestamp is anchored to `--from` rather than the current time.
-
-## Realtime mode & reproducibility
-
-Realtime mode is on by default — genx emits one point per `--step` interval paced to the wall clock, with the first point appearing immediately. Pass `--realtime=false` to generate the full dataset in one burst. Use `--seed` to fix the RNG for reproducible runs.
-
-```bash
-# Default: realtime, step=5s, duration=1m
-genx --type cos
-# Burst mode (generate all at once)
-genx --type cos --realtime=false --duration 1h --step 5m
-# Reproducible run
-genx --type cos --noise 0.05 --devices 3 --seed 42 --duration 1h --step 5m
-```
 
 ## Replay mode
 
@@ -367,6 +376,31 @@ Multi-field payloads produce one metric per field: `genx_temperature`, `genx_hum
 cd examples/otlp && docker compose --profile pull up
 ```
 
+### HTTP pull server (`--output http-server`)
+
+Starts a local HTTP server. Any client can poll `GET /` to retrieve the most recent point(s) as a JSON array — useful for pull-based systems, quick `curl` inspection, or dashboards that poll a REST endpoint.
+
+```bash
+genx --type cos --step 5s --realtime --output http-server --http-port 8888 --http-buffer 10
+curl http://localhost:8888/
+[{"device":"device","timestamp":1715000005,"value":24.81}]
+```
+
+Use `--http-buffer` to control how many recent points are kept in memory. Clients can request fewer with `?n=`:
+
+```bash
+curl "http://localhost:8888/?n=3"
+[
+  {"device":"device","timestamp":1715000000,"value":24.10},
+  {"device":"device","timestamp":1715000005,"value":24.53},
+  {"device":"device","timestamp":1715000010,"value":24.81}
+]
+```
+
+The response is always a JSON array, even when only one point is available. The endpoint always returns JSON regardless of `--format`.
+
+The server stays alive until Ctrl-C. `--realtime` is enabled automatically so the buffer updates on every step. Pass `--realtime=false` explicitly to pre-generate all points instantly and serve them from the buffer until the process is stopped.
+
 ## Scenario scripting
 
 A scenario is a sequence of phases executed in order. Each phase inherits global defaults and overrides only what it sets. This lets you simulate realistic device behaviour: normal operation, fault, recovery.
@@ -454,31 +488,6 @@ genx validate --config config.yaml
 ✓ Total: ~40 points
 ✓ All checks passed
 ```
-
-### HTTP pull server (`--output http-server`)
-
-Starts a local HTTP server. Any client can poll `GET /` to retrieve the most recent point(s) as a JSON array — useful for pull-based systems, quick `curl` inspection, or dashboards that poll a REST endpoint.
-
-```bash
-genx --type cos --step 5s --realtime --output http-server --http-port 8888 --http-buffer 10
-curl http://localhost:8888/
-[{"device":"device","timestamp":1715000005,"value":24.81}]
-```
-
-Use `--http-buffer` to control how many recent points are kept in memory. Clients can request fewer with `?n=`:
-
-```bash
-curl "http://localhost:8888/?n=3"
-[
-  {"device":"device","timestamp":1715000000,"value":24.10},
-  {"device":"device","timestamp":1715000005,"value":24.53},
-  {"device":"device","timestamp":1715000010,"value":24.81}
-]
-```
-
-The response is always a JSON array, even when only one point is available. The endpoint always returns JSON regardless of `--format`.
-
-The server stays alive until Ctrl-C. `--realtime` is enabled automatically so the buffer updates on every step. Pass `--realtime=false` explicitly to pre-generate all points instantly and serve them from the buffer until the process is stopped.
 
 ## Multi-field payloads
 
