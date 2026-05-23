@@ -1,0 +1,1 @@
+{"sensor_id":"{{.Device}}","recorded_at":"{{.TimestampISO}}","readings":{"temperature":{{.Fields.temperature}},"pressure":{{.Fields.pressure}},"vibration":{{.Fields.vibration}}}}

@@ -1,0 +1,9 @@
+duration: 1h
+step: 1m
+realtime: false
+device: sensor
+
+fields:
+  temperature: { type: cos,    min: 18,  max: 26,  period: 12h }
+  pressure:    { type: linear, first: 1010, last: 1015 }
+  vibration:   { type: walk,   walk-start: 0.5, walk-step: 0.05 }
