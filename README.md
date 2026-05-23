@@ -108,6 +108,8 @@ genx --type geo --devices 3 --geo-speed 25 --geo-drift 20 --duration 2h --step 1
 
 Works with all output sinks and formats unchanged.
 
+See `examples/gps-tracking/` for a full runnable config.
+
 ## Fleet mode
 
 Simulate multiple devices with `--devices`. `--spread` adds a per-device random offset so they emit distinct values.
@@ -128,6 +130,8 @@ genx --type cos --device-names "paris,london,berlin" --duration 1h --step 5m
 {"device":"berlin","timestamp":1715000000,"value":25.02}
 ```
 
+See `examples/iot-fleet/` for a full runnable config with MQTT output.
+
 ## Noise & anomalies
 
 ```bash
@@ -138,6 +142,8 @@ genx --type cos --duration 1h --step 1m \
 - `--noise 0.05` — multiply each value by a random factor in `[0.95, 1.05]`
 - `--anomaly-rate 0.02` — ~2% of points become spikes or drops (magnitude set by `--anomaly-factor`)
 - `--dropout-rate 0.03` — ~3% of points are silently skipped
+
+See `examples/anomaly-detection/` for a full runnable config with InfluxDB output.
 
 ## Run summary
 
@@ -173,6 +179,8 @@ Replay a previously recorded JSON-lines file through any configured sink:
 genx --type cos --duration 1h --step 1m --realtime=false > recording.jsonl
 genx --replay-file recording.jsonl --output nats --nats-url nats://localhost:4222 --realtime --step 1m
 ```
+
+See `examples/pipeline-testing/` for a full record-and-replay workflow.
 
 ## Output formats
 
@@ -229,6 +237,8 @@ genx --format cloudevent \
      --cloudevent-type com.acme.sensor.temperature \
      --type cos --step 1m
 ```
+
+See `examples/cloudevents/` for a full runnable config with webhook output.
 
 ### InfluxDB line protocol
 
@@ -290,6 +300,8 @@ genx --output mqtt --mqtt-broker ssl://localhost:8883 \
 ```
 
 Per-device certificates are supported via a YAML config file — see `genx --generate-config` for `mqtt-device-certs`.
+
+See `examples/iot-fleet/` for a full runnable config.
 
 ### Kafka
 
@@ -401,6 +413,8 @@ The response is always a JSON array, even when only one point is available. The 
 
 The server stays alive until Ctrl-C. `--realtime` is enabled automatically so the buffer updates on every step. Pass `--realtime=false` explicitly to pre-generate all points instantly and serve them from the buffer until the process is stopped.
 
+See `examples/http-pull/` for a full runnable config.
+
 ## Scenario scripting
 
 A scenario is a sequence of phases executed in order. Each phase inherits global defaults and overrides only what it sets. This lets you simulate realistic device behaviour: normal operation, fault, recovery.
@@ -450,6 +464,8 @@ scenario:
 ```
 
 During the multi-field phase each point carries a `fields` map instead of a single `value`. Single-field and multi-field phases can be freely mixed within the same scenario.
+
+See `examples/scenario/` for a full runnable config.
 
 ## Count mode
 
@@ -507,6 +523,8 @@ genx --config multi.yaml
 {"device":"env-sensor","timestamp":1715000000,"fields":{"humidity":60.12,"pressure":1010.00,"temperature":22.43}}
 ```
 
+See `examples/multi-field/` for a full runnable config with a custom template.
+
 ## Custom payload template
 
 ```bash
@@ -515,6 +533,8 @@ genx --type cos --duration 1h --step 5m \
 ```
 
 Available placeholders: `{{.Device}}`, `{{.Timestamp}}`, `{{.TimestampISO}}`, `{{.Value}}`, `{{.Fields.name}}`.
+
+See `examples/custom-template/` for a multi-field config with inline and file-based templates.
 
 ## YAML config file
 
